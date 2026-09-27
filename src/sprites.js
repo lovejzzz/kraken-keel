@@ -125,6 +125,18 @@ sprite('torso_draugr', [
 /* ---------- boots, weapons, shields ---------- */
 sprite('boot', ['bbbb..', 'bbbbbb', 'BBBBBB'], { b: 'w2', B: 'w0' });
 sprite('boot_d', ['bbbb..', 'bbbbbb', 'BBBBBB'], { b: 'd1', B: 'd0' });
+/* the captain's armour, worn on the puppet: helm over the head, a mantle over the shoulders, better boots */
+const ARM = { m: 'm2', M: 'm3', W: 'm4', G: 'gold', w: 'b4', k: 'm1' };
+sprite('helm1', ['...mmmmmm....', '..mMMMMMMm...', '.mMMWMMMMMm..', 'mmmmmmmmmmmmm', '..........k..', '..........k..'], ARM);
+sprite('helm2', ['...mmmmmm....', '..mMMMMMMm...', '.mMMWMMMMMm..', 'mGGGGGGGGGGGm', '.k........k..', '.k........k..', '.k...........'], ARM);
+sprite('helm3', ['w..mmmmmm....', 'ww.mMMMMMm...', 'wwmMMWMMMMm..', 'mGGGGGGGGGGGm', '.k........k..', '.k........k..', '.k...........'], ARM);
+sprite('mantle1', ['...ffffffff...', '.fFFFFFFFFFFf.', 'fFFfFFFFfFFFFf', '.f.f..f..f.f..'], { f: 'w3', F: 'w5' });
+sprite('mantle2', ['...ffffffff...', '.fFFFFFFFFFFf.', 'fFFfFFyFfFFFFf', '.f.f..f..f.f..'], { f: 'b1', F: 'b3', y: 'gold' });
+sprite('mantle3', ['..ffffffffff..', '.fFFFFFFFFFFf.', 'fFFfFFyFfFFFFf', 'fFfFfFFfFfFFf.', 'c.c.f..f..c.c.'], { f: 'b1', F: 'b3', y: 'gold', c: 'b4' });
+sprite('boot_fur', ['FFFF..', 'bbbbbb', 'BBBBBB'], { b: 'w3', F: 'b2', B: 'w1' });
+sprite('boot_seal', ['FFFF..', 'bbbbbb', 'BBBBBB'], { b: 'm2', F: 'b3', B: 'm0' });
+function captainGear(extra) { const u = (G && G.ups) || {}; return { helm: u.helm || 0, fur: u.fur || 0, boots: u.rope || 0, ...(extra || {}) }; }
+function armourSprites(gear) { if (!gear) return {}; return { helm: gear.helm ? SPR['helm' + Math.min(3, gear.helm)] : null, mantle: gear.fur ? SPR['mantle' + Math.min(3, gear.fur)] : null, boot: gear.boots ? SPR[gear.boots >= 2 ? 'boot_seal' : 'boot_fur'] : null }; }
 sprite('oar', [
   '.wW.', '.wW.', '.wW.', '.wW.', 'mmmm', '.wW.', '.wW.', '.wW.', '.wW.', '.wW.', '.wW.', '.wW.', '.wW.', '.wW.', '.wW.', '.wW.', '.wW.', '.wW.', '.wW.', '.wW.',
   '.wW.', '.wWW', 'wwWW', 'wwWW', 'wrWW', 'wwrW', 'wrWW', 'wwWW', 'wwWW', 'wwWW', '.wW.', '.W..',
@@ -207,7 +219,7 @@ const FX0 = 36, FY0 = 60; // feet position inside the puppet canvas
 /* Compose one character into the puppet canvas. pose: {run, moving, air, vy, crouch, weaponA, hurt, swim, down, rope, charge, tell} */
 function composePuppet(type, pose) {
   const L = LOOKP[type], g = PUP.g; g.clearRect(0, 0, 72, 72);
-  const WS = { cutlass: [[1, 2], false], scatterbow: [[4, 3], true] }[pose.wSpr], grip = WS ? WS[0] : L.grip, two = WS ? WS[1] : L.twoHand;
+  const WS = { cutlass: [[1, 2], false], scatterbow: [[4, 3], true] }[pose.wSpr], grip = WS ? WS[0] : L.grip, two = WS ? WS[1] : L.twoHand, AR = armourSprites(pose.gear);
   const cr = Math.round(pose.crouch * 3), bob = pose.moving ? (Math.abs(Math.sin(pose.run)) > 0.7 ? 1 : 0) : pose.breath;
   const hipX = FX0, hipY = FY0 - 10 + cr + bob;
   const lean = pose.hurt ? -2 : Math.round(pose.leanPx || 0), step = Math.round(pose.step || 0);
@@ -218,7 +230,7 @@ function composePuppet(type, pose) {
     else if (pose.moving) { const s = Math.sin(ph), c = Math.cos(ph); kx = hipX + s * 3.5; ky = hipY + 4 + Math.min(0, c) * 1.5; fx = hipX + s * 5.5 + (c > 0 ? 0 : -1); fy = FY0 - 3 - Math.max(0, -c) * 2.5; }
     else { const spread = (back ? -2 - pose.crouch * 2 - Math.max(0, step) * 0.4 : 2 + pose.crouch * 2 + step); kx = hipX + spread * 0.6 + (back ? 0 : pose.crouch * 1.5); ky = hipY + 4 - cr * 0.3; fx = hipX + spread; fy = FY0 - 3; }
     P.line(g, hipX + (back ? -2 : 1), hipY, kx, ky, col, 4); P.line(g, kx, ky, fx, fy, col, 4);
-    blit(g, SPR[boot], fx - 2, fy);
+    blit(g, AR.boot || SPR[boot], fx - 2, fy);
   };
   if (pose.swim) {
     // only shoulders and head above water
@@ -242,7 +254,9 @@ function composePuppet(type, pose) {
   // torso and head
   blit(g, SPR[L.torso], hipX + lean - 7, hipY - 11);
   const hy = hipY - 11 + (pose.hurt ? 1 : 0), hx = hipX + lean + (pose.lunge ? 1 : 0);
+  if (AR.mantle) blit(g, AR.mantle, hipX + lean - 7, hipY - 12);
   blit(g, SPR[L.head], hx - 6, hy - 10);
+  if (AR.helm) blit(g, AR.helm, hx - 6, hy - 10);
   if (pose.tell) { P.dot(g, hx + 4, hy - 7, C.r4, 1); }
   // front arm with weapon (weaponA: 0 = hanging down, rotation maps (0,1) -> (-sin, cos))
   const wa = pose.weaponA, ax = shX + 1, ay = shY + 1;
@@ -263,7 +277,7 @@ function drawPuppet(ctx, a, t) {
   const type = a.type, pose = {
     run: a.anim, moving: Math.abs(a.walkV || 0) > 25 && !a.air && !(a.atk || a.phase === 'strike'), air: a.air && !a.onRope && !a.swingPath ? true : !!a.swingPath, vy: a.vy, crouch: Math.max(a.crouch || 0, a.atkCrouch || 0),
     weaponA: a.weaponA, hurt: a.stun > 0.05 && !a.air, swim: a.water, down: a.down > 0 || (a.dead && !a.air && !a.water), rope: !!a.onRope || !!(a.swingPath && !a.swingPath.leap),
-    wSpr: a.type === 'captain' ? { oar: null, cutlass: 'cutlass', scatter: 'scatterbow' }[a.weapon] : null, charge: a.charge || 0, tell: a.tell, blocking: a.blocking, nock: a.nock || 0, spin: a.spinHook || 0, leanPx: a.atkLean || 0, step: a.atkStep || 0, breath: Math.sin(t * 2.2 + a.id * 9) > 0.6 ? 1 : 0,
+    wSpr: a.type === 'captain' ? { oar: null, cutlass: 'cutlass', scatter: 'scatterbow' }[a.weapon] : null, gear: a.type === 'captain' ? captainGear() : null, charge: a.charge || 0, tell: a.tell, blocking: a.blocking, nock: a.nock || 0, spin: a.spinHook || 0, leanPx: a.atkLean || 0, step: a.atkStep || 0, breath: Math.sin(t * 2.2 + a.id * 9) > 0.6 ? 1 : 0,
   };
   if (a.dead && !a.air && !a.water && a.sinkT > 0.35 && Math.floor(a.sinkT * 16) % 2) return;
   const img = composePuppet(type, pose);

@@ -10,7 +10,6 @@ window.ECON = {
     const empty = ps.slots.findIndex((s) => !s.mod), mb = MODULES.ballista;
     if (empty >= 0 && G.silver >= G.price(mb.cost) + 40 && G.modules().filter((m) => m.type === 'ballista').length < 3) { G.silver -= G.price(mb.cost); ps.slots[empty].mod = G.makeModule('ballista', ps.slots[empty].lx); spend('modules', G.price(mb.cost)); }
     // a second weapon once the purse allows
-    if (!G.wpn.own.cutlass && G.silver >= G.price(UPGRADES.cutlass.unlock) + 60) { G.silver -= G.price(UPGRADES.cutlass.unlock); G.wpn.own.cutlass = true; spend('weapons', G.price(UPGRADES.cutlass.unlock)); }
     // 3. upgrades, cheapest first
     for (let pass = 0; pass < 6; pass++) {
       const opts = Object.entries(UPGRADES).filter(([k, u]) => u.max < 10 && (!u.weapon || G.wpn.own[k]) && (G.ups[k] || 0) < G.upMax(k) && G.silver >= G.upCost(k)).sort((a, b) => G.upCost(a[0]) - G.upCost(b[0]));

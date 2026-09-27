@@ -15,8 +15,8 @@ const ROUTE = [['skiffs'], ['rival', 'storm'], ['nest', 'twin'], ['ghost', 'bers
 /* everything the refit sells: the captain's kit (his own page, by tab) and the ship's (the strip at the bottom) */
 const UPGRADES = {
   oar: { name: '船桨', cost: 45, desc: '船桨伤害 +30%', max: 2, max2: 4, icon: 'u_oar', tab: 'weapon', weapon: true, unlock: 0, style: '三连击 · 蓄力横扫 · 击退最强', per: 0.3 },
-  cutlass: { name: '水手弯刀', cost: 50, desc: '弯刀伤害 +25%，流血更深', max: 2, max2: 4, icon: 'u_cutlass', tab: 'weapon', weapon: true, unlock: 80, style: '四连快斩 · 流血 · 蓄力冲刺斩', per: 0.25 },
-  scatter: { name: '霰弹弩', cost: 60, desc: '多一支弩箭，伤害 +20%', max: 2, max2: 4, icon: 'u_scatter', tab: 'weapon', weapon: true, unlock: 120, style: '远程散射 · 贴脸最痛 · 蓄力穿透', per: 0.2 },
+  cutlass: { name: '水手弯刀', cost: 50, desc: '弯刀伤害 +25%，流血更深', max: 2, max2: 4, icon: 'u_cutlass', tab: 'weapon', weapon: true, drop: '击败海妖掉落', style: '四连快斩 · 流血 · 蓄力冲刺斩', per: 0.25 },
+  scatter: { name: '霰弹弩', cost: 60, desc: '多一支弩箭，伤害 +20%', max: 2, max2: 4, icon: 'u_scatter', tab: 'weapon', weapon: true, drop: '击败霜龙掉落', style: '远程散射 · 贴脸最痛 · 蓄力穿透', per: 0.2 },
   whet: { name: '磨利桨刃', cost: 40, desc: '暴击 +6%', max: 2, max2: 3, icon: 'u_whet', tab: 'weapon' },
   rune: { name: '雷纹符文', cost: 55, desc: '蓄力快 30%', max: 1, icon: 'u_rune', tab: 'weapon' },
   rope: { name: '海豹皮靴', cost: 30, desc: '跳得更高', max: 2, icon: 'u_boots', tab: 'armor' },
@@ -70,7 +70,7 @@ const G = {
     this.player.slots[1].mod = this.makeModule('ballista', SLOT_LX[1]); this.player.slots[4].mod = this.makeModule('brazier', SLOT_LX[4]);
     this.ships.push(this.player);
     this.captain = new Captain({}); this.captain.land(this.player, -20);
-    this.silver = 60; this.step = 0; this.ups = {}; this.chapter = 1; this.fullRun = !title; this.wpn = { cur: 'oar', own: { oar: true } }; this.hawks = []; this.ices = []; this.boss = null; if (Sky.theme !== 'sea') Sky.setTheme('sea'); this.floes = []; this.map = SeaMap.generate(1); this.node = null; this.discount = 1; this.stats = { kills: 0, overboard: 0, ships: 0, tentacles: 0, time: 0 };
+    this.silver = 60; this.step = 0; this.ups = {}; this.chapter = 1; this.fullRun = !title; const pg = Save.progress(); this.wpn = { cur: 'oar', own: { oar: true, cutlass: !!pg.w_cutlass, scatter: !!pg.w_scatter } }; this.hawks = []; this.ices = []; this.boss = null; if (Sky.theme !== 'sea') Sky.setTheme('sea'); this.floes = []; this.map = SeaMap.generate(1); this.node = null; this.discount = 1; this.stats = { kills: 0, overboard: 0, ships: 0, tentacles: 0, time: 0 };
     Sea.targetStorm = Sea.storm = 0.35; Sea.speed = 60; this.darkK = 0; this.fogK = 0;
     this.state = title ? 'title' : 'route'; Bon.reset();
     if (!title) { Save.clear(); const first = this.map.layers[1][0]; this.map.at = first.id; first.visited = true; this.node = first; UI.screen = null; this.startEncounter(first.enc); }
@@ -115,16 +115,24 @@ const G = {
     this.banner('龙骨断了', '船沉入了海底', '#ff9a7a', 3);
     setTimeout(() => UI.end(false), 2600);
   },
+  /* a boss falls: its weapon drops (the first time, with a show), then the victory screen */
+  bossDrop(k, wx, wy) {
+    this.state = 'victory'; Sea.targetStorm = 0.1; this.darkK = 0;
+    const done = () => { UI.loot = null; UI.end(true); Sfx.play('win', 0, 1); };
+    if (Save.progress()['w_' + k]) { this.wpn.own[k] = true; return done(); }
+    Save.unlock('w_' + k); this.wpn.own[k] = true;
+    UI.loot = { k, t: 0, sx: Cam.bx(wx), sy: Cam.by(wy), done, parts: [], burst: false }; UI.screen = 'loot';
+  },
   bossGone(w) {
     Sky.auroraK = 2.5; Sea.targetStorm = 0.15; this.fogK = 0; FX.splash(w.hx, 3); Sfx.play('splashBig', 0, 1);
-    this.timers.push({ t: 1.5, f: () => { this.boss = null; } }, { t: 3.5, f: () => { this.state = 'victory'; Sea.targetStorm = 0.1; UI.end(true); Sfx.play('win', 0, 1); } });
+    this.timers.push({ t: 1.5, f: () => { this.boss = null; } }, { t: 3.5, f: () => this.bossDrop('scatter', w.hx, w.hy) });
   },
   krakenDies(K) {
     FX.slowmo(0.2, 1.4); Cam.shake(0.45); Sfx.play('roar', 0, 1); Sky.strike(null, false); Sea.targetStorm = 0.12; this.fogK = 0; this.timers.push({ t: 1.2, f: () => { Sky.dawnTarget = 1; } }); setTimeout(() => Sfx.play('splashBig', 0, 1), 900);
     for (const t of this.tentacles) { t.hp = 0; }
     const e = K.eyePos; FX.burst(e.x, e.y, { n: 80, speed: 700, size: 6, color: 'g2', life: 1.6, add: true, grav: 300 });
     this.banner('深渊安静了', '海妖沉回了海底', '#8ff0ff', 3.5);
-    setTimeout(() => { this.state = 'victory'; Sea.targetStorm = 0.1; this.darkK = 0; UI.end(true); Sfx.play('win', 0, 1); }, 4200);
+    const ep = K.eyePos; this.timers.push({ t: 3.6, f: () => this.bossDrop('cutlass', ep.x, ep.y) });
   },
   banner(title, sub, col = '#ffd8a0', dur = 2.2, rune = '') { UI.banner(title, sub, col, dur, rune); },
 
@@ -135,17 +143,17 @@ const G = {
     s.tx = ps.x + side * (ps.L + s.L + 70); s.vx = -side * 60; s.ballCd = 6; s.boardCd = 3; s.slots = [];
     this.ships.push(s);
     o.crew.forEach((type, i) => {
-      const e = new Enemy({ type, hpMul: 1 + this.step * 0.08, value: type === 'chieftain' ? 70 : type === 'berserker' ? 12 : type.includes('Shield') || type === 'shield' ? 9 : 7 });
+      const e = new Enemy({ type, hpMul: 1 + this.step * 0.1, value: type === 'chieftain' ? 70 : type === 'berserker' ? 12 : type.includes('Shield') || type === 'shield' ? 9 : 7 });
       e.role = STATS[type].ranged ? 'thrower' : 'boarder'; e.land(s, lerp(-s.walk + 30, s.walk - 30, (i + 0.5) / o.crew.length)); this.enemies.push(e);
     });
     if (o.pal === 'ghost') s.ghost = true;
   },
   spawnSkiff(side, crew) {
     const ps = this.player;
-    const s = new Ship({ x: ps.x + side * 1500, kind: 'skiff', team: 'enemy', pal: this.chapter === 2 ? 'frost' : 'raider', dir: -side, accel: 140, hull: 70 });
+    const s = new Ship({ x: ps.x + side * 1500, kind: 'skiff', team: 'enemy', pal: this.chapter === 2 ? 'frost' : 'raider', dir: -side, accel: 140, hull: 150 + this.step * 12 });
     s.tx = ps.x + side * (ps.L + s.L + 40); s.vx = -side * 120; s.crewLeft = crew.length;
     this.ships.push(s);
-    crew.forEach((type, i) => { const e = new Enemy({ type, hpMul: 1 + this.step * 0.08, value: type === 'berserker' ? 12 : 7 }); e.role = STATS[type].ranged ? 'thrower' : 'boarder'; e.land(s, lerp(-40, 40, crew.length > 1 ? i / (crew.length - 1) : 0.5)); this.enemies.push(e); });
+    crew.forEach((type, i) => { const e = new Enemy({ type, hpMul: 1 + this.step * 0.1, value: type === 'berserker' ? 12 : 7 }); e.role = STATS[type].ranged ? 'thrower' : 'boarder'; e.land(s, lerp(-40, 40, crew.length > 1 ? i / (crew.length - 1) : 0.5)); this.enemies.push(e); });
   },
   spawnSlam(delay = 0) {
     this.timers.push({ t: delay, f: () => {
@@ -162,7 +170,7 @@ const G = {
     for (let i = 0; i < n; i++) {
       this.timers.push({ t: i * 0.7, f: () => {
         const side = pick([-1, 1]), p = ps.toWorld(side * (ps.L + 50), 0);
-        const e = new Enemy({ type: Math.random() < 0.7 ? 'drowned' : Math.random() < 0.5 ? 'draugrShield' : 'draugr', hpMul: 1 + this.step * 0.08, value: 8 });
+        const e = new Enemy({ type: Math.random() < 0.7 ? 'drowned' : Math.random() < 0.5 ? 'draugrShield' : 'draugr', hpMul: 1 + this.step * 0.1, value: 8 });
         e.x = p.x; e.y = Sea.height(p.x) + 10; e.air = true; this.enemies.push(e);
         e.swingPath = { t: 0, dur: 0.8, leap: true, p0: { x: e.x, y: e.y }, landLx: side * rand(ps.walk * 0.5, ps.walk - 10), ship: ps };
         FX.splash(p.x, 1); e.face = -side;
@@ -294,14 +302,14 @@ const G = {
   },
   fireBallista(b, power, manual) {
     const s = this.player, p = s.toWorld(b.lx, s.deckY(b.lx) - 30), sp = 1300 + 600 * power, U = b.ups || {};
-    const dmg = 28 * (U.arm ? 1.4 : 1) * (manual ? 0.8 + power * 0.6 : 1);
+    const dmg = 22 * (U.arm ? 1.4 : 1) * (manual ? 0.8 + power * 0.6 : 1);
     const aims = U.twin ? [b.aim - 0.045, b.aim + 0.045] : [b.aim];
     for (const a of aims) {
       const bx = p.x + Math.cos(a) * 34, by = p.y + Math.sin(a) * 34, crit = Math.random() < 0.15 + (U.arm ? 0.05 : 0);
       this.shots.push(new Projectile({ x: bx, y: by, vx: Math.cos(a) * sp + s.vx, vy: Math.sin(a) * sp, grav: 380, dmg: dmg * (crit ? 2 : 1), crit, team: 'player', kind: 'bolt', pierce: manual && power > 1.2 ? 2 : 0, hot: (manual && power > 1.2) || !!U.fire, manual, fire: !!U.fire, harp: !!U.harp, from: { x: p.x, y: p.y } }));
       FX.burst(bx, by, { n: 6, angle: a, spread: 0.5, speed: 160, size: 3, color: U.fire ? 'f4' : 'foam', grav: -40, life: 0.4, kind: 'mist' });
     }
-    b.cd = 2.3 * (U.winch ? 0.65 : 1); b.recoil = 1;
+    b.cd = 2.8 * (U.winch ? 0.65 : 1); b.recoil = 1;
     Sfx.play('ballista', clamp((p.x - Cam.x) / 900, -1, 1), 1);
     if (manual) { Cam.shake(0.04); Cam.kick(0.01); }
   },
@@ -312,8 +320,8 @@ const G = {
         p.hitSet.add(e); FX.hitSpark(p.x, p.y, Math.atan2(p.vy, p.vx), false);
         if (p.harp) { e.hurt(p.dmg * 0.7, -Math.sign(p.vx) * 700, -520, { stun: 1 }); FX.text(e.x, e.y - 90, '鱼叉！', '#ffd8a0', 20, 0.8); }
         else if (p.kind === 'pellet') { const v = p.volley, first = !v.hitE || !v.hitE.has(e); (v.hitE ??= new Set()).add(e); e.hurt(p.dmg * this.lightMul(e.x, e.y), first ? Math.sign(p.vx) * p.kx : 0, first ? p.ky : 0, { stun: first ? p.stun : 0.05, noScale: true }); }
-        else e.hurt(p.dmg * this.lightMul(e.x, e.y), Math.sign(p.vx) * (p.kx ?? (p.crit ? 620 : 420)) * (p.crit ? 1.3 : 1), p.ky ?? (p.crit ? -420 : -280), { stun: p.stun ?? 0.6 });
-        if (p.crit && !(p.volley && p.volley.crit)) { critFX(p.x, p.y - 16, p.dmg * (p.harp ? 0.7 : this.lightMul(e.x, e.y))); if (p.volley) p.volley.crit = true; }
+        else e.hurt(p.dmg * this.lightMul(e.x, e.y) * 0.55, Math.sign(p.vx) * (p.kx ?? (p.crit ? 460 : 320)), p.ky ?? (p.crit ? -320 : -220), { stun: p.stun ?? 0.5 });
+        if (p.crit && !(p.volley && p.volley.crit)) { critFX(p.x, p.y - 16, p.dmg * (p.harp ? 0.7 : this.lightMul(e.x, e.y) * (p.kind === 'pellet' ? 1 : 0.55))); if (p.volley) p.volley.crit = true; }
         if (p.volley && p.charged && !p.volley.coop && e.hp > 0) { p.volley.coop = true; Bon.coopDive(e); }
         if (p.fire) Salvage.burnActor(e, 3.5);
         Sfx.play('hit', e.pan(), p.kind === 'pellet' ? 0.45 : 1); FX.stop(p.kind === 'pellet' ? 0.015 : 0.04);
@@ -516,8 +524,7 @@ const G = {
     let best = null, bd = 1e9;
     const consider = (x, y, pri) => { const d = Math.hypot(x - p.x, y - p.y) / pri; if (d < bd && d < 1600) { bd = d; best = { x, y }; } };
     for (const t of this.tentacles) if (t.hittable() && t.pts.length) { const q = t.pts[(t.pts.length * 0.6) | 0]; consider(q.x, q.y, 2); }
-    for (const s of this.ships) if (s.team === 'enemy' && !s.sunk && s.hull > 0) { if (s.kind === 'skiff' && !s.leaving) consider(s.x, s.y - 4, 1.6); else if (s.kind !== 'skiff' && !s.leaving) { const q = s.toWorld(rand(-80, 80), -10); consider(q.x, q.y, 1); } }
-    for (const e of this.enemies) if (!e.dead && e.swingPath && !e.swingPath.leap) consider(e.cx, e.cy, 1.3);
+    for (const s of this.ships) if (s.team === 'enemy' && !s.sunk && s.hull > 0) { if (s.kind === 'skiff' && !s.leaving) consider(s.x, s.y - 4, 0.8); else if (s.kind !== 'skiff' && !s.leaving) { const q = s.toWorld(rand(-80, 80), -10); consider(q.x, q.y, 1); } }
     return best;
   },
   interact(dt) {

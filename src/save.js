@@ -24,6 +24,7 @@ const Save = {
   load(s) {
     G.newRun(true);
     Object.assign(G, { chapter: s.chapter, step: s.step, silver: s.silver, parts: s.parts, ups: s.ups || {}, wpn: s.wpn || { cur: 'oar', own: { oar: true } }, discount: s.discount || 1, stats: s.stats || G.stats, fullRun: !!s.fullRun });
+    { const pg = this.progress(); G.wpn.own = { ...G.wpn.own, cutlass: G.wpn.own.cutlass || !!pg.w_cutlass, scatter: G.wpn.own.scatter || !!pg.w_scatter }; }
     Object.assign(G.captain, s.cap);
     const ps = G.player; ps.hull = s.ship.hull; ps.hullMax = s.ship.hullMax;
     ps.slots.forEach((sl, i) => { const d = s.ship.slots[i]; sl.mod = d ? Object.assign(G.makeModule(d.type, sl.lx), d) : null; });

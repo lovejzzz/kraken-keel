@@ -78,6 +78,7 @@ const UI = {
       if (e.key === 'Escape' && this.screen === 'settings') { this.screen = this.settingsBack || 'title'; return; }
       if (e.key === 'Escape' && (this.screen === 'bon' || this.screen === 'cap')) { this.screen = 'refit'; return; }
       if (e.key === 'Escape') { if (this.screen === 'how') this.screen = 'title'; else if (G.state === 'fight' || G.state === 'won') this.pause(!this.paused); }
+      if ((e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') && this.screen === 'loot' && this.loot && this.loot.t > 1.6) { this.loot.done(); return; }
       if (e.key === 'Enter' && this.screen === 'title') { const sv = Save.get(); if (sv) { Sfx.init(); Save.load(sv); } else this.start(); }
       if (e.key === 'm' || e.key === 'M') { Sfx.init(); const on = !(Settings.music || Settings.sfx); Settings.music = Settings.sfx = on; Settings.save(); Sfx.apply(); G.banner(on ? '声音开' : '静音', '', '#e8dcbc', 0.6); }
     });
@@ -114,6 +115,7 @@ const UI = {
   hitAt(p) { for (let i = this.rects.length - 1; i >= 0; i--) { const r = this.rects[i]; if (p.x >= r.x && p.y >= r.y && p.x < r.x + r.w && p.y < r.y + r.h) return r; } return null; },
   update(dt) {
     this.hurtT = Math.max(0, this.hurtT - dt * 2.5);
+    if (this.loot) this.loot.t += dt;
     if (this.coins.length && (['map', 'route', 'title', 'how', 'end'].includes(this.screen) || G.state === 'title')) { for (const c of this.coins) if (!c.part) G.silverPending = Math.max(0, G.silverPending - (c.value || 1)); this.coins = []; }
     if (this.travel) { this.travel.t += dt / 0.85; if (this.travel.t >= 1) { const n = this.travel.node; this.travel = null; SeaMap.enter(n); } }
     if (this.banner_) { this.banner_.t += dt; if (this.banner_.t > this.banner_.dur + 0.5) this.banner_ = null; }
@@ -168,11 +170,12 @@ const UI = {
     else if (this.screen === 'refit') this.drawRefit(ctx, W, H);
     else if (this.screen === 'bon') this.drawBon(ctx, W, H);
     else if (this.screen === 'cap') this.drawCap(ctx, W, H);
+    else if (this.screen === 'loot') this.drawLoot(ctx, W, H);
     else if (this.screen === 'pause') this.drawPause(ctx, W, H);
     else if (this.screen === 'end') this.drawEnd(ctx, W, H);
     else if (this.screen === 'settings') this.drawSettings(ctx, W, H);
     // a gear in the corner opens the settings from anywhere in a voyage
-    if (G.state !== 'title' && !['title', 'how', 'settings', 'pause', 'end', 'event', 'bon', 'cap'].includes(this.screen)) {
+    if (G.state !== 'title' && !['title', 'how', 'settings', 'pause', 'end', 'event', 'bon', 'cap', 'loot'].includes(this.screen)) {
       this.button(ctx, 'gearbtn', W - 20, 4, 16, 16, '', { fn: () => { if (!this.screen && (G.state === 'fight' || G.state === 'won')) { this.pause(true); this.settingsBack = 'pause'; } else this.settingsBack = this.screen || 'refit'; this.screen = 'settings'; } });
       blit(ctx, SPR.gear, W - 16, 8 - (this.hover === 'gearbtn' ? 1 : 0));
     }
@@ -182,6 +185,7 @@ const UI = {
     const cap = G.captain, ps = G.player;
     // captain portrait
     this.panel(ctx, 6, 6, 30, 30, 'dark'); ctx.drawImage(SPR.head_captain, 0, 0, 13, 12, 9, 9, 26, 24);
+    { const hs = armourSprites(captainGear()).helm; if (hs) ctx.drawImage(hs, 0, 0, hs.width, hs.height, 9, 9, hs.width * 2, hs.height * 2); }
     text(ctx, '船长', 42, 6, { size: 10, color: C.b2 });
     this.bar(ctx, 42, 19, 96, 6, cap.hp / cap.max, cap.hp / cap.max < 0.3 && Math.floor(G.t * 6) % 2 ? C.r4 : C.r3);
     digits(ctx, `${Math.max(0, Math.round(cap.hp))}`, 142, 19, C.b3);
@@ -346,7 +350,15 @@ const UI = {
       const n = hovered, T = NODE_TYPES[n.enc === 'wyrm' ? 'wyrm' : n.type], e = n.enc ? ENC[n.enc] : null, p = SeaMap.pos(n, R);
       const title = e && n.type !== 'boss' ? `${tr(T.name)} · ${tr(e.name)}` : tr(T.name), body = e ? e.sub : T.desc;
       const lines = wrapText(ctx, body, 150, 10), w = 170, h = 34 + lines.length * 12 + (n.enc && n.type !== 'boss' ? 12 : 0);
-      const x = Math.round(clamp(p.x + 18, R.x + 4, R.x + R.w - w - 4)), y = Math.round(clamp(p.y - h / 2, R.y + 4, R.y + R.h - h - 22));
+      // place the tip where it hides the fewest destinations (the ones you can sail to count most)
+      const boxes = all.filter((q) => q.type !== 'start').map((q) => { const qp = SeaMap.pos(q, R); return { x: qp.x - 14, y: qp.y - 14, w: 28, h: 38, k: q === n ? 12 : avail.has(q.id) ? 4 : 1 }; });
+      const fit = (cx, cy) => ({ x: Math.round(clamp(cx, R.x + 4, R.x + R.w - w - 4)), y: Math.round(clamp(cy, R.y + 4, R.y + R.h - h - 22)) });
+      const cands = [fit(p.x + 20, p.y - h / 2), fit(p.x - 20 - w, p.y - h / 2), fit(p.x - w / 2, p.y - 22 - h), fit(p.x - w / 2, p.y + 40), fit(p.x + 20, p.y - h - 8), fit(p.x - 20 - w, p.y + 12)];
+      for (let gx = R.x + 4; gx <= R.x + R.w - w - 4; gx += 14) for (let gy = R.y + 4; gy <= R.y + R.h - h - 22; gy += 10) cands.push({ x: gx, y: gy });
+      for (const b of boxes) b.k = b.k >= 12 ? 400 : b.k >= 4 ? 60 : 1;
+      boxes.push({ x: R.x + 8, y: R.y + 4, w: 150, h: 34, k: 0.6 }, { x: R.x + R.w - 170, y: R.y + 4, w: 160, h: 16, k: 0.6 });
+      const cost = (c) => boxes.reduce((a, b) => a + b.k * Math.max(0, Math.min(c.x + w, b.x + b.w) - Math.max(c.x, b.x)) * Math.max(0, Math.min(c.y + h, b.y + b.h) - Math.max(c.y, b.y)), 0) + Math.hypot(c.x + w / 2 - p.x, c.y + h / 2 - p.y) * 0.5;
+      const { x, y } = cands.reduce((best, c) => (cost(c) < cost(best) ? c : best), cands[0]);
       this.panel(ctx, x, y, w, h, 'dark');
       text(ctx, title, x + 8, y + 6, { size: 11, color: C.f5, bold: true, fit: w - 16 });
       lines.forEach((l, i) => text(ctx, l, x + 8, y + 22 + i * 12, { size: 10, color: C.b2 }));
@@ -389,6 +401,7 @@ const UI = {
     const cy0 = Math.round(H * 0.45) - 40, by = cy0 + 42;
     this.button(ctx, 'capbtn', 8, cy0, 96, 36, '', { fn: openCap });
     ctx.drawImage(SPR.head_captain, 0, 0, 13, 12, 13, cy0 + 6, 26, 24);
+    { const hs = armourSprites(captainGear()).helm; if (hs) ctx.drawImage(hs, 0, 0, hs.width, hs.height, 13, cy0 + 6, hs.width * 2, hs.height * 2); }
     text(ctx, '船长', 44, cy0 + 5, { size: 13, color: C.b4, bold: true });
     text(ctx, '装备 · 补给', 44, cy0 + 20, { size: 9, color: C.f5, bold: true, fit: 56 });
     this.button(ctx, 'bonbtn', 8, by, 96, 36, '', { fn: open });
@@ -423,11 +436,52 @@ const UI = {
     const w = Math.round(Math.max(w1, w2) + 14), h = 30, x = Math.round(clamp(cx - w / 2, 4, Cam.BW - w - 4)), y = by - h;
     this.panel(ctx, x, y, w, h, 'dark'); text(ctx, name, x + w / 2, y + 4, { size: 10, align: 'center', color: C.f5, bold: true }); text(ctx, desc, x + w / 2, y + 17, { size: 9, align: 'center', color: C.b3 });
   },
+  /* a boss dropped a weapon: rays, the weapon flying out of the boss, a burst, and its name */
+  drawLoot(ctx, W, H) {
+    const L = this.loot; if (!L) return;
+    const u = UPGRADES[L.k], t = L.t, cx = W / 2, cy = Math.round(H * 0.42), ease = (k) => 1 + 2.7 * Math.pow(k - 1, 3) + 1.7 * Math.pow(k - 1, 2);
+    const dim = Math.min(0.75, t * 1.6); P.rect(ctx, 0, 0, W, H, `rgba(4,6,12,${dim})`); TXT.dim(ctx, dim);
+    // turning god-rays
+    if (t > 0.4) {
+      const a0 = t * 0.35, R = Math.max(W, H) * 0.75, fade = Math.min(1, (t - 0.4) * 2);
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < 14; i++) { const a = a0 + (i / 14) * TAU, w = 0.09; ctx.fillStyle = i % 2 ? `rgba(255,220,120,${0.16 * fade})` : `rgba(255,255,240,${0.08 * fade})`; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a - w) * R, cy + Math.sin(a - w) * R); ctx.lineTo(cx + Math.cos(a + w) * R, cy + Math.sin(a + w) * R); ctx.closePath(); ctx.fill(); }
+      const g = ctx.createRadialGradient(cx, cy, 2, cx, cy, 70); g.addColorStop(0, `rgba(255,230,150,${0.55 * fade})`); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(cx - 70, cy - 70, 140, 140);
+      ctx.restore();
+    }
+    // the weapon flies out of the boss, spinning, and lands with a bounce
+    const k = clamp((t - 0.25) / 0.7, 0, 1), e = ease(k), px = lerp(L.sx, cx, e), py = lerp(L.sy, cy, e) + (k >= 1 ? Math.sin(t * 2.2) * 3 : 0), sc = Math.round(lerp(2, 6, Math.min(1, k * 1.3))), rot = (1 - k) * TAU * 2;
+    const ic = inkOutline(SPR[u.icon], SPR[u.icon].width, SPR[u.icon].height, k >= 1 && Math.floor(t * 8) % 2 ? C.gold : C.ink);
+    ctx.save(); ctx.translate(Math.round(px), Math.round(py)); ctx.rotate(rot); ctx.imageSmoothingEnabled = false; ctx.drawImage(ic, -ic.width * sc / 2, -ic.height * sc / 2, ic.width * sc, ic.height * sc); ctx.restore();
+    if (k < 1 && Math.random() < 0.9) L.parts.push({ x: px, y: py, vx: rand(-20, 20), vy: rand(-20, 20), life: 0.5, c: 'f5' });
+    // arrival: flash, ring, sparks, fanfare
+    if (k >= 1 && !L.burst) {
+      L.burst = true; L.bt = t; Cam.shake(0.25); Sfx.play('levelup', 0, 1); Sfx.play('crit', 0, 1); Sfx.play('chargeFull', 0, 1);
+      for (let i = 0; i < 60; i++) { const a = rand(0, TAU), s = rand(40, 220); L.parts.push({ x: cx, y: cy, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: rand(0.6, 1.3), c: pick(['gold', 'f5', 'f6', 'white']) }); }
+    }
+    if (L.burst) {
+      const bt = t - L.bt;
+      if (bt < 0.25) P.rect(ctx, 0, 0, W, H, `rgba(255,248,220,${0.6 * (1 - bt / 0.25)})`);
+      if (bt < 0.8) { const r = Math.round(bt * 240); P.ring(ctx, cx, cy, r, C[bt < 0.4 ? 'white' : 'gold']); P.ring(ctx, cx, cy, Math.max(1, r - 6), C.f4); }
+      if (Math.random() < 0.5) { const a = rand(0, TAU), r = rand(20, 46); L.parts.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r, vx: 0, vy: -10, life: 0.5, c: 'white', tw: true }); }
+    }
+    for (const p of L.parts) { p.life -= 1 / 60; p.x += p.vx / 60; p.y += p.vy / 60; p.vx *= 0.97; p.vy = p.vy * 0.97 + 1; if (p.life > 0) { if (p.tw) { P.dot(ctx, p.x, p.y, C.white); P.dot(ctx, p.x - 1, p.y, C.f5); P.dot(ctx, p.x + 1, p.y, C.f5); } else P.rect(ctx, Math.round(p.x), Math.round(p.y), p.life > 0.6 ? 2 : 1, p.life > 0.6 ? 2 : 1, C[p.c]); } }
+    L.parts = L.parts.filter((p) => p.life > 0);
+    // the words
+    if (t > 1.05) {
+      const f = Math.min(1, (t - 1.05) * 3), up = Math.round((1 - f) * 10);
+      text(ctx, '获得新武器！', cx, cy - 64 + up, { size: 12, align: 'center', color: C.f5, bold: true, outline: true });
+      text(ctx, u.name, cx, cy + 40 + up, { size: 24, align: 'center', color: C.gold, bold: true, outline: true, shadow: C.w0 });
+      text(ctx, u.style, cx, cy + 70 + up, { size: 10, align: 'center', color: C.b3, outline: true });
+      text(ctx, '永久解锁：以后每一局都能用 · 按 Q 或在船长面板切换', cx, cy + 86 + up, { size: 9, align: 'center', color: C.b2, outline: true, fit: W - 20 });
+    }
+    if (t > 1.6) { if (Math.floor(t * 2.5) % 2) text(ctx, '点击继续', cx, H - 22, { size: 10, align: 'center', color: C.b1, outline: true }); this.rects.push({ id: 'lootok', x: 0, y: 0, w: W, h: H, fn: () => L.done() }); }
+  },
   /* the captain's weapons: three picture cards (buy, equip, upgrade), then the crit and charge mods */
   drawWeapons(ctx, rx, rw, cy) {
     const cw = Math.floor((rw - 8) / 3), ch = 92;
     ['oar', 'cutlass', 'scatter'].forEach((k, i) => {
-      const u = UPGRADES[k], own = G.wpn.own[k], cur = G.wpn.cur === k, cx = rx + i * (cw + 4), id = 'wp_' + k, hov = this.hover === id, lv = G.ups[k] || 0, mx = G.upMax(k), unlock = G.price(u.unlock), poor = !own && G.silver < unlock;
+      const u = UPGRADES[k], own = G.wpn.own[k], cur = G.wpn.cur === k, cx = rx + i * (cw + 4), id = 'wp_' + k, hov = this.hover === id && own, lv = G.ups[k] || 0, mx = G.upMax(k);
       this.panel(ctx, cx, cy - (hov ? 2 : 0), cw, ch, cur ? 'dark' : 'wood'); const oy = cy - (hov ? 2 : 0);
       if (cur) { P.rect(ctx, cx + 1, oy + 1, cw - 2, 1, C.f5); P.rect(ctx, cx + 1, oy + ch - 2, cw - 2, 1, C.f5); }
       const ic = SPR[u.icon]; P.rect(ctx, cx + 4, oy + 4, cw - 8, 24, C.ink); P.rect(ctx, cx + 5, oy + 5, cw - 10, 22, own ? C.b1 : C.w2); P.rect(ctx, cx + 5, oy + 5, cw - 10, 1, C.b3);
@@ -435,9 +489,9 @@ const UI = {
       if (own) for (let p = 0; p < mx; p++) { const px = cx + cw / 2 - (mx * 6) / 2 + p * 6; P.rect(ctx, px, oy + 30, 5, 4, C.ink); P.rect(ctx, px + 1, oy + 31, 3, 2, p < lv ? C.f5 : C.b0); }
       text(ctx, u.name, cx + cw / 2, oy + 37, { size: 10, align: 'center', color: cur ? C.f5 : C.b4, bold: true, fit: cw - 6 });
       wrapText(ctx, u.style, cw - 8, 8).slice(0, 3).forEach((l, j) => text(ctx, l, cx + cw / 2, oy + 49 + j * 9, { size: 8, align: 'center', color: C.b1, shadow: false }));
-      if (!own) { const s = String(unlock), sw = s.length * 4 + 9; blit(ctx, SPR.coin, cx + cw / 2 - sw / 2 - 1, oy + ch - 12); digits(ctx, s, cx + cw / 2 - sw / 2 + 8, oy + ch - 11, poor ? C.r3 : C.gold); }
+      if (!own) { ctx.globalAlpha = 0.6; P.rect(ctx, cx + 5, oy + 5, cw - 10, 22, C.w1); ctx.globalAlpha = 1; blit(ctx, SPR.sk_lock, cx + cw / 2 - 4, oy + 12); text(ctx, u.drop, cx + cw / 2, oy + ch - 13, { size: 8, align: 'center', color: C.f4, bold: true, shadow: false, fit: cw - 6 }); }
       else text(ctx, cur ? '使用中' : '点击装备', cx + cw / 2, oy + ch - 13, { size: 8, align: 'center', color: cur ? C.green : C.f4, bold: true, shadow: false });
-      this.rects.push({ id, x: cx, y: cy, w: cw, h: ch, disabled: poor || cur, fn: () => { if (!own) { G.silver -= unlock; G.wpn.own[k] = true; Sfx.play('coin', 0, 1); } G.wpn.cur = k; Sfx.play('build', 0, 0.7); } });
+      this.rects.push({ id, x: cx, y: cy, w: cw, h: ch, disabled: !own || cur, fn: () => { G.wpn.cur = k; Sfx.play('build', 0, 0.7); } });
       const upc = G.upCost(k), maxed = lv >= mx;
       this.button(ctx, 'wu_' + k, cx, cy + ch + 3, cw, 16, !own ? '未拥有' : maxed ? '已满' : `升级 ${upc}`, { size: 9, disabled: !own || maxed || G.silver < upc, fn: () => this.buy(k) });
       if (this.hover === 'wu_' + k && own && !maxed) this.tip(ctx, u.name, u.desc, cx + cw / 2, cy - 2);
@@ -472,7 +526,9 @@ const UI = {
     const lx = x + 8, lw = 122, bh = 92;
     this.panel(ctx, lx, y + 8, lw, bh, 'dark');
     const deckY = y + 8 + 80; P.rect(ctx, lx + 3, deckY, lw - 6, 4, C.w3); P.rect(ctx, lx + 3, deckY, lw - 6, 1, C.w5); for (let i = lx + 10; i < lx + lw - 4; i += 14) P.rect(ctx, i, deckY + 1, 1, 3, C.w2);
-    const pose = { wSpr: { cutlass: 'cutlass', scatter: 'scatterbow' }[cap.weapon] || null, run: 0, moving: false, air: false, vy: 0, crouch: 0, weaponA: REST_A - HALF_PI + Math.sin(t * 1.5) * 0.05, hurt: false, swim: false, down: false, rope: false, charge: 0, tell: 0, blocking: false, nock: 0, spin: 0, leanPx: 0, step: 0, breath: Math.floor(t * 1.2) % 2 };
+    const hv = { up_helm: 'helm', up_fur: 'fur', up_rope: 'boots' }[this.hover], hk = { helm: 'helm', fur: 'fur', boots: 'rope' }[hv];
+    const preview = hv && (G.ups[hk] || 0) < G.upMax(hk) ? { [hv]: (G.ups[hk] || 0) + 1 } : null;
+    const pose = { gear: captainGear(preview), wSpr: { cutlass: 'cutlass', scatter: 'scatterbow' }[cap.weapon] || null, run: 0, moving: false, air: false, vy: 0, crouch: 0, weaponA: REST_A - HALF_PI + Math.sin(t * 1.5) * 0.05, hurt: false, swim: false, down: false, rope: false, charge: 0, tell: 0, blocking: false, nock: 0, spin: 0, leanPx: 0, step: 0, breath: Math.floor(t * 1.2) % 2 };
     const img = inkOutline(composePuppet('captain', pose), 72, 72);
     ctx.save(); ctx.beginPath(); ctx.rect(lx + 2, y + 10, lw - 4, bh - 4); ctx.clip();
     ctx.drawImage(img, 14, 20, 48, 42, lx + lw / 2 - 48, deckY - 82, 96, 84); ctx.restore();

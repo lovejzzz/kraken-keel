@@ -578,7 +578,7 @@ class Projectile {
 
 /* ---------------- deck modules ---------------- */
 const MODULES = {
-  ballista: { name: '弩炮', cost: 40, hp: 70, desc: '自动射击敌船、小艇、触手和海妖的眼睛。' },
+  ballista: { name: '弩炮', cost: 60, hp: 70, desc: '自动射击敌船、小艇、触手和海妖的眼睛。' },
   wall: { name: '盾墙', cost: 25, hp: 130, desc: '拦住敌人，也挡飞斧和触手。' },
   brazier: { name: '火盆', cost: 30, hp: 60, desc: '光里的敌人更怕打，亡灵变慢，触手避开火光。' },
 };
