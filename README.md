@@ -1,8 +1,8 @@
 # 海妖龙骨 Kraken Keel
 
-A pixel-art Viking sea brawler that runs in the browser. Hold the deck of your longship against boarders, build ballistas, raise Bon the scarlet macaw, and sail two chapters to the kraken and the frost wyrm.
+A pixel-art Viking sea brawler that runs in the browser. Hold the deck of your longship against boarders, build ballistas, raise Bon the scarlet macaw, and sail five chapters, from the kraken to Ragnarök.
 
-一款在浏览器里玩的像素风维京海战游戏：守住长船甲板、打退登船的海盗、建造弩炮、养成鹦鹉伙伴 Bon，穿过两章航海图，迎战海妖与霜龙。
+一款在浏览器里玩的像素风维京海战游戏：守住长船甲板、打退登船的海盗、建造弩炮、养成鹦鹉伙伴 Bon，穿过五章航海图——海妖、霜龙、火巨人苏尔特、死者之船与海拉，直到诸神黄昏的尘世巨蟒。
 
 **Play:** https://lovejzzz.github.io/kraken-keel/
 
@@ -19,14 +19,18 @@ A pixel-art Viking sea brawler that runs in the browser. Hold the deck of your l
 | Switch weapon | Q | Q |
 | Pause | Esc | ⚙ |
 
-Swings lean toward the cursor; the scatterbow aims at it. On touch, attacks aim at the nearest foe.
+Swings lean toward the cursor; the scatterbow and harpoon aim at it. On touch, attacks aim at the nearest foe.
 
 ## Features
 
-- Two chapters on a branching sea chart (fights, elites, wrecks, harbours, fog), ending with the kraken and the frost wyrm
-- Three weapons with their own play styles: oar, cutlass (bleed, dash cut) and scatterbow (spread shot, piercing charge)
+- Five chapters on a branching sea chart (fights, elites, wrecks, harbours, fog), each with its own sky, enemies and boss:
+  the Fjords (kraken), the Frozen North (frost wyrm), the Fire Isles (Surtr), the Sea of the Dead (Naglfar and Hel) and Ragnarök (Jörmungandr)
+- Every boss drops a weapon with its own play style: oar, cutlass (bleed, dash cut), scatterbow (spread shot), lava axe (burning cuts, fire fissure),
+  soul harpoon (drag foes to you, or yourself to them) and Thor's hammer (chain lightning, thrown and recalled)
+- Up to eight upgrade levels as the chapters go on; weapons turn iron, gilt and finally glowing rune steel, and the longship gains iron straps,
+  steel cladding, a gilded prow and sail
 - Bon the parrot fights beside you: team-up moves, lightning and phoenix magic, food, gear and a wardrobe, kept between voyages
-- Auto-save with continue; clear chapter 1 to start straight from chapter 2
+- Auto-save with continue; clear a chapter to start straight from the next one
 - Chinese and English, music and sound toggles; plays on desktop and touch screens
 
 ## Build

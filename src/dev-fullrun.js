@@ -22,6 +22,7 @@ window.FR = {
     if (FX.timeScale <= 0 || FX.timeScale > 1) this.note('time', 'timeScale ' + FX.timeScale);
   },
   step(render) {
+    if (!render) UI.rects = []; // no stale buttons from the last drawn screen for the bot's clicks to press
     const dt = (1 / 60) * FX.timeScale;
     if (FX.hitstop > 0) { FX.hitstop -= 1 / 60; FX.update && 0; }
     else { G.t += 1 / 60; Cam.update(1 / 60); G.update(dt); }

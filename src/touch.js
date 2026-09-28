@@ -46,7 +46,7 @@ const Touch = {
   aim(G) {
     const cap = G.captain; let best = null, bd = 1e9;
     const consider = (x, y, pri = 1) => { const d = Math.hypot(x - cap.x, y - cap.y) / pri - (Math.sign(x - cap.x) === cap.face ? 60 : 0); if (d < bd && Math.abs(x - cap.x) < 520) { bd = d; best = { x, y }; } };
-    for (const e of G.enemies) if (!e.dead && !e.water) consider(e.cx, e.cy);
+    for (const e of G.enemies) if (!e.dead && !e.water && !(e.phased > 0)) consider(e.cx, e.cy);
     for (const h of G.hawks || []) if (!h.dead) consider(h.x, h.y, 1.2);
     for (const t of G.tentacles) if (t.hittable() && t.pts.length) { const q = t.pts[(t.pts.length * 0.7) | 0]; consider(q.x, q.y, 0.9); }
     if (G.kraken && G.kraken.eye > 0.6) { const q = G.kraken.eyePos; consider(q.x, q.y, 1.3); }
@@ -68,8 +68,8 @@ const Touch = {
     const add = (id, x, y, w, h, label, show = true) => { if (show) this.btns.push({ id, x: Math.round(x), y: Math.round(y), w, h, label }); };
     add('left', 8, H - 46, 36, 36, '◀'); add('right', 50, H - 46, 36, 36, '▶');
     if (fight) {
-      const own = G.wpn ? ['oar', 'cutlass', 'scatter'].filter((k) => G.wpn.own[k]).length : 1;
-      add('atk', W - 54, H - 58, 46, 46, G.captain.weapon === 'scatter' ? '射' : '攻');
+      const own = G.wpn ? WEAPONS.filter((k) => G.wpn.own[k]).length : 1;
+      add('atk', W - 54, H - 58, 46, 46, RANGED[G.captain.weapon] ? '射' : '攻');
       add('jump', W - 100, H - 46, 38, 38, '跳');
       add('roll', W - 54, H - 100, 38, 30, '滚');
       add('brace', W - 138, H - 40, 32, 30, '扎');

@@ -219,7 +219,7 @@ const FX0 = 36, FY0 = 60; // feet position inside the puppet canvas
 /* Compose one character into the puppet canvas. pose: {run, moving, air, vy, crouch, weaponA, hurt, swim, down, rope, charge, tell} */
 function composePuppet(type, pose) {
   const L = LOOKP[type], g = PUP.g; g.clearRect(0, 0, 72, 72);
-  const WS = { cutlass: [[1, 2], false], scatterbow: [[4, 3], true] }[pose.wSpr], grip = WS ? WS[0] : L.grip, two = WS ? WS[1] : L.twoHand, AR = armourSprites(pose.gear);
+  const WS = pose.wSpr ? WGRIP[pose.wSpr.replace(/_t\d$/, '')] : null, grip = WS ? WS[0] : L.grip, two = WS ? WS[1] : L.twoHand, AR = armourSprites(pose.gear);
   const cr = Math.round(pose.crouch * 3), bob = pose.moving ? (Math.abs(Math.sin(pose.run)) > 0.7 ? 1 : 0) : pose.breath;
   const hipX = FX0, hipY = FY0 - 10 + cr + bob;
   const lean = pose.hurt ? -2 : Math.round(pose.leanPx || 0), step = Math.round(pose.step || 0);
@@ -277,9 +277,11 @@ function drawPuppet(ctx, a, t) {
   const type = a.type, pose = {
     run: a.anim, moving: Math.abs(a.walkV || 0) > 25 && !a.air && !(a.atk || a.phase === 'strike'), air: a.air && !a.onRope && !a.swingPath ? true : !!a.swingPath, vy: a.vy, crouch: Math.max(a.crouch || 0, a.atkCrouch || 0),
     weaponA: a.weaponA, hurt: a.stun > 0.05 && !a.air, swim: a.water, down: a.down > 0 || (a.dead && !a.air && !a.water), rope: !!a.onRope || !!(a.swingPath && !a.swingPath.leap),
-    wSpr: a.type === 'captain' ? { oar: null, cutlass: 'cutlass', scatter: 'scatterbow' }[a.weapon] : null, gear: a.type === 'captain' ? captainGear() : null, charge: a.charge || 0, tell: a.tell, blocking: a.blocking, nock: a.nock || 0, spin: a.spinHook || 0, leanPx: a.atkLean || 0, step: a.atkStep || 0, breath: Math.sin(t * 2.2 + a.id * 9) > 0.6 ? 1 : 0,
+    wSpr: a.type === 'captain' ? wSprite(a.weapon, a) : null, gear: a.type === 'captain' ? captainGear() : null, charge: a.charge || 0, tell: a.tell, blocking: a.blocking, nock: a.nock || 0, spin: a.spinHook || 0, leanPx: a.atkLean || 0, step: a.atkStep || 0, breath: Math.sin(t * 2.2 + a.id * 9) > 0.6 ? 1 : 0,
   };
   if (a.dead && !a.air && !a.water && a.sinkT > 0.35 && Math.floor(a.sinkT * 16) % 2) return;
+  // a phased wraith is a flicker of mist
+  if (a.phased > 0 && Math.floor(performance.now() / 60) % 3) return;
   const img = composePuppet(type, pose);
   const jit = a.jitter > 0 && a.flash > 0.05 ? (Math.floor(performance.now() / 33) % 2 ? 1 : -1) * (a.jitter > 0.1 ? 2 : 1) : 0;
   const bx = Cam.bx(a.x) + jit, by = Cam.by(a.y) + (a.water ? 12 : 0);
@@ -322,8 +324,9 @@ function drawSmear(ctx, a, back) {
     outer.push([ox + c * (r2 + 1), oy + sn * (r2 + 1)]); inner.push([ox + c * ri, oy + sn * ri]); edge.push([ox + c * (r2 - 2 - u * 2), oy + sn * (r2 - 2 - u * 2)]);
   }
   const poly = (A, B, col) => { ctx.fillStyle = col; ctx.beginPath(); A.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); for (let i = B.length - 1; i >= 0; i--) ctx.lineTo(B[i][0], B[i][1]); ctx.closePath(); ctx.fill(); };
-  if (back) { poly(outer, inner, s.heavy ? C.f3 : C.b1); return; }
+  const K = s.col; // a weapon's tier colours its smear: [back, bright, edge]
+  if (back) { poly(outer, inner, K ? C[K[0]] : s.heavy ? C.f3 : C.b1); return; }
   const half = Math.floor(n * 0.35);
-  poly(outer.slice(half), edge.slice(half), s.heavy ? C.f6 : C.b4);
-  poly(outer.slice(Math.floor(n * 0.7)), edge.slice(Math.floor(n * 0.7)), C.white);
+  poly(outer.slice(half), edge.slice(half), K ? C[K[1]] : s.heavy ? C.f6 : C.b4);
+  poly(outer.slice(Math.floor(n * 0.7)), edge.slice(Math.floor(n * 0.7)), K ? C[K[2]] : C.white);
 }

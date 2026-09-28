@@ -48,12 +48,12 @@ const Salvage = {
     }
   },
   /* ---- burning ---- */
-  burnActor(e, dur = 3) { e.burn = Math.max(e.burn || 0, dur); },
+  burnActor(e, dur = 3, dmg = 4) { e.burn = Math.max(e.burn || 0, dur); e.burnDmg = Math.max(e.burn > 0 && e.burnDmg || 0, dmg); },
   updateBurns(dt) {
     for (const e of G.enemies) if (e.burn > 0 && !e.dead) {
       e.burn -= dt; e.burnTick = (e.burnTick || 0) - dt;
       if (e.water) e.burn = 0;
-      if (e.burnTick <= 0) { e.burnTick = 0.5; e.hp -= 4; e.flash = 0.4; if (e.hp <= 0) G.kill(e); }
+      if (e.burnTick <= 0) { e.burnTick = 0.5; e.hp -= e.burnDmg || 4; e.flash = 0.4; if (e.hp <= 0) G.kill(e); }
       if (Math.random() < dt * 14) FX.burst(e.x + rand(-6, 6), e.y - rand(10, 50), { n: 1, angle: -Math.PI / 2, spread: 0.4, speed: 60, size: 1, color: 'f5', color2: 'f3', grav: -120, life: 0.4, kind: 'ember', water: false });
     }
     for (const s of G.ships) if (s.burn > 0 && s.team === 'enemy' && !s.sunk) {

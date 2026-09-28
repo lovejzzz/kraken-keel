@@ -129,6 +129,7 @@ const Sky = {
       }
       return c;
     };
+    this.mkCloud = mk;
     this.clouds = [
       { c: mk(480, 70, 3.1, 0.6, ['n3', 'n4', 'n5']), y: -330, par: 0.05, sp: 2 },
       { c: mk(480, 64, 9.7, 0.56, ['n2', 'n3', 'n4']), y: -270, par: 0.1, sp: 4 },
@@ -160,14 +161,16 @@ const Sky = {
     const g = ctx.createLinearGradient(0, 0, 0, hz), bt = this.tint, dw = this.dawn;
     // night -> the kraken's bruised green-violet sky -> dawn once it is gone
     const stop = (night, boss, dawn, fl) => { const c = mixc(mixc(night, boss, bt), dawn, dw); return rgba(c[0] + f * fl[0], c[1] + f * fl[1], c[2] + f * fl[2]); };
-    g.addColorStop(0, stop([8, 11, 24], [18, 6, 24], [34, 38, 78], [80, 90, 110])); g.addColorStop(0.7, stop([22, 33, 55], [44, 18, 46], [150, 96, 112], [90, 100, 110])); g.addColorStop(1, stop([44, 76, 96], [62, 104, 70], [255, 168, 104], [80, 90, 90]));
+    const N = this.skyCols || [[8, 11, 24], [22, 33, 55], [44, 76, 96]];
+    g.addColorStop(0, stop(N[0], [18, 6, 24], [34, 38, 78], [80, 90, 110])); g.addColorStop(0.7, stop(N[1], [44, 18, 46], [150, 96, 112], [90, 100, 110])); g.addColorStop(1, stop(N[2], [62, 104, 70], [255, 168, 104], [80, 90, 90]));
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, hz);
     if (bt > 0.02) { const sg = ctx.createLinearGradient(0, hz - 40, 0, hz); sg.addColorStop(0, 'rgba(0,0,0,0)'); sg.addColorStop(1, rgba(120, 255, 170, 0.18 * bt * (1 - dw))); ctx.fillStyle = sg; ctx.fillRect(0, hz - 40, W, 40); }
     if (bt > 0.6 && dw < 0.3) return; // the moon is swallowed by the storm
     const mx = Math.round(W * this.moon.x), my = Math.round(clamp(hz * 0.3, 16, 60)), ma = Sea.storm < 0.8;
-    const mg = ctx.createRadialGradient(mx, my, 4, mx, my, 70); mg.addColorStop(0, rgba(140, 170, 200, ma ? 0.35 : 0.15)); mg.addColorStop(1, 'rgba(0,0,0,0)');
+    const MC = this.moonCol || ['b3', 'b4', 'b2', [140, 170, 200]];
+    const mg = ctx.createRadialGradient(mx, my, 4, mx, my, 70); mg.addColorStop(0, rgba(MC[3][0], MC[3][1], MC[3][2], ma ? 0.35 : 0.15)); mg.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = mg; ctx.fillRect(mx - 70, my - 70, 140, 140);
-    P.disc(ctx, mx, my, 9, C.b3); P.disc(ctx, mx - 2, my - 1, 8, C.b4); P.dot(ctx, mx + 3, my + 2, C.b2, 2); P.dot(ctx, mx - 3, my - 3, C.b3, 2); P.dot(ctx, mx + 1, my - 4, C.b2);
+    P.disc(ctx, mx, my, 9, C[MC[0]]); P.disc(ctx, mx - 2, my - 1, 8, C[MC[1]]); P.dot(ctx, mx + 3, my + 2, C[MC[2]], 2); P.dot(ctx, mx - 3, my - 3, C[MC[0]], 2); P.dot(ctx, mx + 1, my - 4, C[MC[2]]);
   },
   drawClouds(ctx, t) {
     const f = this.flash;

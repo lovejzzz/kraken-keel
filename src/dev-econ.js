@@ -1,4 +1,4 @@
-/* Dev-only: play whole voyages (chapter 1 then 2) with a sensible shopping policy and keep a ledger. Needs dev-harness + dev-fullrun. */
+/* Dev-only: play whole voyages (chapters 1 to 5) with a sensible shopping policy and keep a ledger. Needs dev-harness + dev-fullrun. */
 window.ECON = {
   shop(led) {
     const cap = G.captain, ps = G.player, spend = (what, cost) => { led.spent[what] = (led.spent[what] || 0) + cost; };
@@ -22,19 +22,19 @@ window.ECON = {
     for (const m of G.modules()) if (m.type === 'ballista') for (const [k, up] of Object.entries(BALLISTA_UPS)) if (!(m.ups || {})[k] && G.parts >= up.parts) { G.parts -= up.parts; m.ups = { ...(m.ups || {}), [k]: true }; led.partsSpent += up.parts; }
   },
   voyage() {
-    localStorage.removeItem('kk.bon'); Bon.load();
+    localStorage.removeItem('kk.bon'); localStorage.removeItem('kk.progress'); Bon.load();
     const led = { fights: [], spent: {}, partsSpent: 0, chapterEnd: [], src: {} };
     const ob = Coins.burst.bind(Coins); Coins.burst = (x, y, n, pw) => { const st = new Error().stack.split('\n')[2] || '', m = st.match(/at (?:Object\.|G\.)?([\w.]+)/), k = m ? m[1] : '?'; led.src[k] = (led.src[k] || 0) + Math.round(n); return ob(x, y, n, pw); }; this._ob = ob;
     UI.start(); H.opts = { god: true, charge: true }; H.n = 0;
-    for (let ch = 1; ch <= 2; ch++) {
-      if (ch === 2) G.startChapter(2);
+    for (let ch = 1; ch <= (this.last || 5); ch++) {
+      if (ch > 1) { UI.loot = null; UI.screen = null; G.startChapter(ch); }
       let guard = 0;
       while (guard++ < 12) {
         const s0 = G.silver, p0 = G.parts, key = G.enc && G.enc.key; let f = 0;
         const cap = G.captain, lim = G.enc && G.enc.boss ? 60 * 400 : 60 * 150;
         while (G.state === 'fight' && f < lim) {
           const b = G.boss, tp = b && b.targetPoint();
-          if (f % 6 === 0) { if (b && tp && (b.exposed || b.scales.some((q) => q.hp > 0))) { Input.keys.delete('a'); Input.keys.delete('d'); const sc = Cam.toScreen(tp.x, tp.y); Input.mouse.sx = sc.x; Input.mouse.sy = sc.y; if (Math.abs(tp.x - cap.x) > 60) Input.keys.add(tp.x > cap.x ? 'd' : 'a'); else Input.mouse.lp = true; } else H.botStep(); } if (G.captain.water && f % 30 === 0) { Input.taps.add(' '); } FR.step(false); f++; if (G.player.hull < 40) G.player.hull = 120; }
+          if (f % 6 === 0) { if (b && tp && (b.exposed || (b.scales && b.scales.some((q) => q.hp > 0)) || (b.fist && b.fist.hit))) { Input.keys.delete('a'); Input.keys.delete('d'); const sc = Cam.toScreen(tp.x, tp.y); Input.mouse.sx = sc.x; Input.mouse.sy = sc.y; if (Math.abs(tp.x - cap.x) > 60) Input.keys.add(tp.x > cap.x ? 'd' : 'a'); else Input.mouse.lp = true; } else H.botStep(); } if (G.captain.water && f % 30 === 0) { Input.taps.add(' '); } FR.step(false); f++; if (G.player.hull < 40) G.player.hull = 120; }
         let k = 0; while (G.state === 'won' && k++ < 600) FR.step(false);
         const boss = G.enc && G.enc.boss;
         if (boss) { if (G.state === 'fight') { if (G.kraken && !G.kraken.dying) { G.kraken.hp = 0; G.kraken.checkPhase(G); } if (G.boss && !G.boss.dying) G.boss.chip(1e6, G); led.forced = (led.forced || 0) + 1; } let w = 0; while (G.state !== 'victory' && w++ < 60 * 10) FR.step(false); if (G.state !== 'victory') { G.state = 'victory'; } }
@@ -51,7 +51,7 @@ window.ECON = {
           else FR.step(true);
         }
       }
-      led.chapterEnd.push({ ch, silver: G.silver, parts: G.parts, state: G.state, bonLv: Bon.d.lv, ups: JSON.stringify(G.ups) });
+      led.chapterEnd.push({ ch, silver: G.silver, parts: G.parts, state: G.state, bonLv: Bon.d.lv, hull: Math.round(G.player.hullMax), hp: G.captain.max, ups: JSON.stringify(G.ups), own: WEAPONS.filter((k) => G.wpn.own[k]).join(',') });
       if (G.state !== 'victory') break;
     }
     led.totalEarned = led.fights.reduce((a, f) => a + Math.max(0, f.earned), 0); Coins.burst = this._ob;

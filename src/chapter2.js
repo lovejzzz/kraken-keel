@@ -55,8 +55,10 @@ Object.assign(ENC, {
   wyrm: { name: '霜龙', sub: '冰海深处，一条巨龙醒了。', rune: 'ᚹᛁᚱᛗ', storm: 0.8, reward: 0, boss: true, script: [{ at: 2, wyrm: 1 }] },
 });
 const CHAPTERS = {
-  1: { name: '峡湾', pool: FIGHT_POOL, elite: ELITE_POOL, boss: 'kraken', theme: 'sea' },
-  2: { name: '冰封北海', pool: [[], ['floes'], ['floes', 'powder', 'falcon'], ['powder', 'falcon', 'troll'], ['troll', 'blizzard', 'falcon'], ['blizzard', 'troll', 'powder']], elite: ['avalanche', 'jarl'], boss: 'wyrm', theme: 'ice' },
+  1: { name: '峡湾', pool: FIGHT_POOL, elite: ELITE_POOL, boss: 'kraken', theme: 'sea', pal: 'raider', drop: 'cutlass', node: 'boss', ambush: 'skiffs', rune: 'ᚠᛃᛟᚱᛞ', col: '#8ff0ff',
+    endTitle: '第一章 完', endText: '海妖沉回了海底。北方的冰海里，传来了龙吟……' },
+  2: { name: '冰封北海', pool: [[], ['floes'], ['floes', 'powder', 'falcon'], ['powder', 'falcon', 'troll'], ['troll', 'blizzard', 'falcon'], ['blizzard', 'troll', 'powder']], elite: ['avalanche', 'jarl'], boss: 'wyrm', theme: 'ice', pal: 'frost', drop: 'scatter', node: 'wyrm', ambush: 'floes', rune: 'ᚾᛟᚱᛞ', col: '#bfe8ff',
+    endTitle: '第二章 完', endText: '霜龙沉入冰海。南方的天边烧成了红色，火山醒了……', starter: [700, 12] },
 };
 
 /* ---------------- hawks ---------------- */
@@ -91,14 +93,14 @@ Object.assign(G, {
     this.chapter = n; this.step = (n - 1) * 6; this.map = SeaMap.generate(n); this.node = null; this.discount = 1;
     Sky.setTheme(CHAPTERS[n].theme); Sky.dawnTarget = 0; Sky.dawn = 0;
     const cap = this.captain, ps = this.player;
-    this.enemies = []; this.ships = [ps]; this.tentacles = []; this.shots = []; this.kraken = null; this.boss = null; this.timers = []; this.crates = []; this.fires = []; this.ices = []; this.hawks = [];
+    this.enemies = []; this.ships = [ps]; this.tentacles = []; this.shots = []; this.kraken = null; this.boss = null; this.timers = []; this.crates = []; this.fires = []; this.ices = []; this.hawks = []; this.resetRealm();
     Coins.list = []; UI.coins = []; Waves.list = [];
     cap.hp = cap.max; cap.water = false; cap.down = 0; cap.frozen = 0; cap.carried = false; cap.land(ps, 0); ps.hull = ps.hullMax; ps.breaches = []; ps.sinking = 0; ps.sunk = false;
     for (const sl of ps.slots) if (sl.mod) sl.mod.hp = sl.mod.max;
     Bon.reset(); this.makeFloes();
     const first = this.map.layers[1][0]; this.map.at = first.id; first.visited = true; this.node = first;
     UI.screen = null; UI.paused = false; FX.timeScale = 1; this.startEncounter(first.enc);
-    this.timers.push({ t: 0.1, f: () => this.banner(`第 ${n} 章`, CHAPTERS[n].name, '#bfe8ff', 3.2, 'ᚾᛟᚱᛞ') });
+    this.timers.push({ t: 0.1, f: () => this.banner(`第 ${n} 章`, CHAPTERS[n].name, CHAPTERS[n].col, 3.2, CHAPTERS[n].rune) });
   },
   makeFloes() { this.floes = []; if (Sky.theme !== 'ice') return; for (let i = 0; i < 9; i++) this.floes.push({ x0: rand(0, 3200), w: randi(10, 26), h: randi(3, 6), seed: rand(0, 9), far: Math.random() < 0.6 }); },
   drawFloes(ctx, far) {
@@ -132,7 +134,7 @@ Object.assign(G, {
     for (const e of this.enemies) { if (e === src || e.dead || e.water) continue; const d = Math.hypot(e.cx - x, e.cy - y); if (d < r) { e.hurt(dmg * 1.5 * (1 - d / r * 0.4), Math.sign(e.x - x || 1) * 620, -560, { stun: 0.7 }); if (e.hp <= 0) this.kill(e, cap); } }
     for (const h of this.hawks) if (!h.dead && Math.hypot(h.x - x, h.y - y) < r) h.hurt(dmg, Math.sign(h.x - x || 1));
     for (const s of this.ships) {
-      if (s.sunk) continue; const lo = s.toLocal(x, y);
+      if (s.sunk || s.bossShip) continue; const lo = s.toLocal(x, y);
       if (Math.abs(lo.x) < s.L && lo.y > s.deckY(lo.x) - 90 && lo.y < 40) { s.damage(dmg * (s === this.player ? 0.6 : 1.2), lo.x); if (s === this.player && Math.random() < 0.4) this.fireAt(clamp(lo.x, -s.walk, s.walk)); if (s !== this.player && s.hull <= 0) this.shipSinks(s); }
     }
   },
@@ -183,9 +185,9 @@ Object.assign(Sky, {
     G.makeFloes && G.makeFloes();
   },
   drawAurora(ctx) {
-    if (this.theme !== 'ice') return;
+    const AC = { ice: [[90, 255, 170], [80, 220, 255], [190, 120, 255]], hel: [[90, 255, 170], [120, 255, 220], [60, 200, 150]], ragnarok: [[255, 90, 60], [255, 170, 80], [200, 60, 120]] }[this.theme]; if (!AC) return;
     const W = Cam.BW, hz = Math.max(1, Cam.by(-250)), t = G.t, boost = 1 + this.auroraK, red = this.auroraRed;
-    const cols = [[90, 255, 170], [80, 220, 255], [190, 120, 255]];
+    const cols = AC;
     ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < 3; i++) {
       const c = mixc(cols[i], [255, 70, 90], red);

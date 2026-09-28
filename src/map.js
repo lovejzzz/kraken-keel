@@ -18,6 +18,8 @@ const NODE_TYPES = {
   boss: { icon: 'n_boss', name: '海妖', desc: '深渊里的那只眼睛。' },
   wyrm: { icon: 'n_wyrm', name: '霜龙', desc: '冰海深处的巨龙。它会缠住整条船。' },
 };
+/* the boss node of whichever chapter the chart belongs to */
+function nodeType(n) { return NODE_TYPES[n.type === 'boss' ? CHAPTERS[G.map.ch].node : n.type]; }
 const FIGHT_POOL = [[], ['skiffs'], ['rival', 'storm', 'skiffs'], ['storm', 'nest', 'rival'], ['nest', 'ghost', 'storm'], ['ghost', 'nest', 'storm']];
 const ELITE_POOL = ['twin', 'berserk'];
 
@@ -69,8 +71,8 @@ const SeaMap = {
     if (n.type === 'harbor') return this.event('港口', '峡湾里的小港口。木匠补好了船，你也喝上了热汤。港口商店打八折。', () => { const ps = G.player, cap = G.captain; ps.hull = ps.hullMax; ps.breaches = []; cap.hp = cap.max; G.discount = 0.8; G.openRefit(true); }, { heal: true }, true);
     if (n.type === 'mystery') {
       const r = Math.random();
-      if (r < 0.45) { const rw = { silver: 30 + G.step * 8, parts: randi(2, 4) }; return this.event('迷雾', '雾散开时，你们撞上了一条被遗弃的货船，舱里还有东西。', () => this.pay(rw), rw); }
-      if (r < 0.75) return this.event('迷雾', '是埋伏！小艇从雾里冲了出来。', () => { n.enc = 'skiffs'; n.reward = { silver: 40 + G.step * 5, parts: 1 }; UI.screen = null; G.startEncounter('skiffs'); }, null, false, true);
+      if (r < 0.45) { const rw = { silver: 30 + G.step * 12, parts: randi(2, 4) }; return this.event('迷雾', '雾散开时，你们撞上了一条被遗弃的货船，舱里还有东西。', () => this.pay(rw), rw); }
+      if (r < 0.75) { const am = CHAPTERS[G.chapter].ambush || 'skiffs'; return this.event('迷雾', '是埋伏！敌人从雾里冲了出来。', () => { n.enc = am; n.reward = { silver: Math.round(ENC[am].reward * 0.6) + G.step * 5, parts: 1 }; UI.screen = null; G.startEncounter(am); }, null, false, true); }
       return this.event('迷雾', '雾里传来歌声。船员们说那是好兆头：船长的生命上限 +20。', () => { G.captain.max += 20; G.captain.hp = G.captain.max; }, { heal: true });
     }
   },

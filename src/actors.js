@@ -41,7 +41,7 @@ class Actor {
   groundAngle() { if (!this.ship) return 0; const s = this.ship, e = 2, dy = s.deckY(this.lx + e) - s.deckY(this.lx - e); return s.a + Math.atan2(dy, 2 * e); }
   land(ship, lx) {
     const was = this.air;
-    this.ship = ship; this.lx = lx; this.air = false; this.onRope = null;
+    this.ship = ship; this.lx = lx; this.air = false; this.onRope = null; this.zipT = 0;
     const T = { x: Math.cos(ship.a), y: Math.sin(ship.a) }, pv = ship.pointVel(this.x, this.y);
     this.vu = (this.vx - pv.x) * T.x + (this.vy - pv.y) * T.y;
     if (was) { const impact = Math.min(1, Math.abs(this.vy) / 900); this.squash = 0.25 * impact + 0.05; if (impact > 0.3) { Sfx.play('land', this.pan(), impact); FX.burst(this.x, this.y, { n: 5, angle: -Math.PI / 2, spread: 1.4, speed: 120, size: 1, color: 'n7', life: 0.35, grav: 500 }); } }
@@ -95,7 +95,7 @@ class Actor {
     }
     // airborne
     this.coyote -= dt; this.vy += GRAV * dt;
-    if (this.team === 'player' && this.stun <= 0 && !this.onRope) {
+    if (this.team === 'player' && this.stun <= 0 && !this.onRope && !(this.zipT > 0)) {
       if (move) this.vx += clamp(move * 225 - this.vx, -1600 * dt, 1600 * dt);
       else this.vx *= Math.exp(-7 * dt);
     } else this.vx *= Math.exp(-0.25 * dt);
@@ -113,7 +113,7 @@ class Actor {
         const lx = Math.sign(lo.x) * (s.walk - 4), p = s.toWorld(lx, s.deckY(lx)); this.x = p.x; this.y = p.y; this.vx *= 0.2; this.land(s, lx); this.squash = 0.25; return;
       }
       // hull body: push out past the nearer end
-      if (Math.abs(lo.x) < s.L - 10 && lo.y > s.deckY(lo.x) + 6 && lo.y < 40) {
+      if (Math.abs(lo.x) < s.L - 10 && lo.y > s.deckY(lo.x) + 6 && lo.y < 40 && !(this.zipT > 0)) {
         const out = Math.sign(lo.x) || 1, p = s.toWorld(out * (s.L + 12), lo.y); this.x = p.x; this.vx = out * Math.abs(this.vx) * 0.3 + s.vx;
       }
     }
@@ -157,7 +157,7 @@ class Actor {
     if (this.y > Sea.height(this.x) + 6) this.enterWater();
   }
   hurt(dmg, kx, ky, o = {}) {
-    if (this.dead || this.iframes > 0) return false;
+    if (this.dead || this.iframes > 0 || this.phased > 0) return false;
     if (this.team === 'player' && this.armor) dmg *= this.armor;
     this.hp -= dmg; this.flash = 1; this.flashT0 = performance.now();
     // the more punishment a raider has taken, the further he flies (captain excluded)

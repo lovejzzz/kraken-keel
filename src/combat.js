@@ -37,6 +37,11 @@ function chargedAttack(c) {
   return { name: 'sweep', dur: 0.44, hit: [0.02, 0.12], cancel: 99, reach: 104 + c * 18, dmg: 28 + c * 34, kx: 900 + c * 700, ky: -540 - c * 320, stop: 0.1 + c * 0.06, heavy: true, charged: true, sfx: 'swingBig',
     keys: [[0, CHARGE_A, -4, 0.55, -3], [0.045, 5.2, 2, 0.3, 3, 1], [0.095, 7.1, 7, 0.6, 7, 1], [0.17, 7.5, 4, 0.35, 4], [0.44, REST_A + TAU, 0, 0, 0]] };
 }
+/* every melee weapon: its combo, its charged move and the smear radius; ranged weapons name their update method */
+const MELEE = { oar: { combo: ATTACKS, charged: chargedAttack, r: 38 }, cutlass: { combo: CUTLASS, charged: chargedCutlass, r: 27 } };
+const RANGED = { scatter: 'updateScatter' };
+/* enemy spells by shot name, and extra projectile looks (filled in by the later chapters and weapons) */
+const SHOTS = {}, PROJ_DRAW = {};
 /* sample a keyframed attack at time t -> {a, lean, crouch, step} */
 function atkPose(def, t) {
   const K = def.keys; if (t <= K[0][0]) return { a: K[0][1], lean: K[0][2], crouch: K[0][3], step: K[0][4] };
@@ -74,7 +79,7 @@ class Captain extends Actor {
     }
     if (this.carried) { this.air = true; this.anim += dt; this.weaponA = damp(this.weaponA, -2.4 - HALF_PI, 8, dt); this.atk = null; this.charging = false; if (Bon.state !== 'carry') this.carried = false; return; }
     if (this.ship && !G.ships.includes(this.ship)) { this.launch(this.vx, this.vy - 200); this.lastGround = G.player; }
-    let move = I.axis();
+    let move = this.zipT > 0 ? 0 : I.axis(); if (this.zipT > 0) this.zipT -= dt;
     const peaceful = G.state !== 'fight' && G.state !== 'won';
     const grounded = !this.air && !this.water && !this.onRope;
     this.brace = grounded && I.down('s', 'ArrowDown') && !this.atk;
@@ -83,7 +88,7 @@ class Captain extends Actor {
     this.buffer = Math.max(0, this.buffer - dt); this.jumpBuf = Math.max(0, this.jumpBuf - dt);
     // facing: toward the mouse while acting, else toward movement
     const mdx = m.x - this.x;
-    if (this.atk || this.charging || (this.weapon === 'scatter' && !peaceful && !this.water && this.dodge <= 0)) this.face = mdx >= 0 ? 1 : -1; else if (move) this.face = move;
+    if (this.atk || this.charging || (RANGED[this.weapon] && !peaceful && !this.water && this.dodge <= 0)) this.face = mdx >= 0 ? 1 : -1; else if (move) this.face = move;
     // jump (buffered, coyote, variable height)
     if (I.tap(' ', 'w', 'ArrowUp')) this.jumpBuf = 0.13;
     // in the sea, swimming into a hull (or jumping beside one) hauls the captain up over the rail
@@ -118,7 +123,7 @@ class Captain extends Actor {
         Sfx.play('jump', this.pan(), 1.2); FX.burst(this.x, this.y, { n: 8, angle: Math.PI / 2, spread: 1.2, speed: 110, size: 3, color: 'n7', grav: 0, life: 0.35, kind: 'mist', water: false });
       }
     }
-    if (this.air && !this.onRope && this.vy < -200 && !I.down(' ', 'w', 'ArrowUp')) this.vy += 2600 * dt; // short hop when released
+    if (this.air && !this.onRope && !(this.zipT > 0) && this.vy < -200 && !I.down(' ', 'w', 'ArrowUp')) this.vy += 2600 * dt; // short hop when released
     // water: no penalty; swim and jump back out. Only if he drifts far from every ship does the crew haul him in.
     if (this.water) {
       G.hint = '空格 跳出水面 · 游向船边爬上去';
@@ -133,14 +138,14 @@ class Captain extends Actor {
     }
     if (this.dodge > 0) { move = 0; this.spinRoll = (this.spinRoll || 0) + dt * 18 * this.face; } else this.spinRoll = 0;
     // weapon switch (Q) between owned weapons
-    if (I.tap('q', 'Q') && !this.atk && !this.charging && G.wpn) { const own = ['oar', 'cutlass', 'scatter'].filter((k) => G.wpn.own[k]); if (own.length > 1) { G.wpn.cur = own[(own.indexOf(G.wpn.cur) + 1) % own.length]; Sfx.play('ui', 0, 1); FX.text(this.x, this.y - 90, UPGRADES[G.wpn.cur].name, '#ffd8a0', 16, 0.8); this.weaponA = REST_A - HALF_PI; } }
-    const sc = this.weapon === 'scatter', nHits = this.weapon === 'cutlass' ? 4 : 3;
-    if (sc) this.updateScatter(dt, G, m, peaceful); else {
+    if (I.tap('q', 'Q') && !this.atk && !this.charging && G.wpn && !G.hammerOut) { const own = WEAPONS.filter((k) => G.wpn.own[k]); if (own.length > 1) { G.wpn.cur = own[(own.indexOf(G.wpn.cur) + 1) % own.length]; Sfx.play('ui', 0, 1); FX.text(this.x, this.y - 90, UPGRADES[G.wpn.cur].name, '#ffd8a0', 16, 0.8); this.weaponA = REST_A - HALF_PI; } }
+    const sc = !!RANGED[this.weapon], nHits = (MELEE[this.weapon] || MELEE.oar).combo.length;
+    if (sc) this[RANGED[this.weapon]](dt, G, m, peaceful); else {
     // attack: tap for combo, hold to charge
     if (m.lp && !this.water && !peaceful) this.buffer = 0.16;
     this.holdT = m.l ? (this.holdT || 0) + dt : 0; this.chargeFlash = Math.max(0, (this.chargeFlash || 0) - dt * 4);
     const canAct = !this.water && this.dodge <= 0 && !peaceful;
-    if (canAct && !this.charging && (m.r || (m.l && this.holdT > 0.2)) && (!this.atk || (!this.atk.def.heavy && this.atk.t > this.atk.def.hit[1] + 0.02))) {
+    if (canAct && !this.charging && !(this.busyT > 0) && (m.r || (m.l && this.holdT > 0.2)) && (!this.atk || (!this.atk.def.heavy && this.atk.t > this.atk.def.hit[1] + 0.02))) {
       this.atk = null; this.smear = null; this.charging = true; this.chargeT = 0; this.charge = 0; this.chargeLv = 0; this.buffer = 0; Sfx.play('chargeStart', this.pan(), 1);
     }
     if (this.charging) {
@@ -156,10 +161,10 @@ class Captain extends Actor {
         // sparks drawn into the blade, a glow that grows
         if (Math.random() < 0.3 + this.charge * 0.6) { const a = rand(0, TAU), r = rand(26, 44); FX.burst(tip.x + Math.cos(a) * r, tip.y + Math.sin(a) * r, { n: 1, angle: a + Math.PI, spread: 0, speed: r * 5, size: 1, color: this.charge >= 1 ? 'gold' : 'f4', grav: 0, life: 0.2, jit: 0, water: false }); }
         FX.light(tip.x, tip.y, 80 + this.charge * 140, [255, 190, 90], 0.3 + this.charge * 0.7);
-        if ((!m.l && !m.r) || m.lr || m.rr) { this.startAttack(3, this.charge); this.charging = false; this.chargeT = 0; this.charge = 0; this.chargeLv = 0; this.buffer = 0; }
+        if ((!m.l && !m.r) || m.lr || m.rr) { this.startAttack(9, this.charge); this.charging = false; this.chargeT = 0; this.charge = 0; this.chargeLv = 0; this.buffer = 0; }
       }
     }
-    if (this.buffer > 0 && !this.charging && this.dodge <= 0 && !this.water) {
+    if (this.buffer > 0 && !this.charging && this.dodge <= 0 && !this.water && !(this.busyT > 0)) {
       if (!this.atk) { this.buffer = 0; this.startAttack(this.comboT > 0 ? this.combo % nHits : 0); }
       else if (this.atk.t > this.atk.def.cancel && this.atk.step < nHits - 1) { this.buffer = 0; this.startAttack(this.atk.step + 1); }
     }
@@ -187,7 +192,8 @@ class Captain extends Actor {
     const lost = Math.floor(G.silver * 0.15); if (lost) { G.silver -= lost; FX.text(this.x, this.y - 60, `-${lost} 银`, '#c0c8d0', 20); }
   }
   startAttack(step, charge = 0) {
-    const cut = this.weapon === 'cutlass', def = step === 3 ? (cut ? chargedCutlass(charge) : chargedAttack(charge)) : (cut ? CUTLASS : ATTACKS)[step];
+    // step 9 is the charged move (every combo is shorter than that)
+    const M = MELEE[this.weapon] || MELEE.oar, def = step === 9 ? M.charged(charge) : M.combo[step];
     // the swing leans toward the cursor: aim up to hit what is above, down for what is below
     const sh = this.shoulderWorld(), fa = Math.atan2(Input.mouse.y - sh.y, Math.abs(Input.mouse.x - sh.x) + 8), tilt = def.dash ? 0 : clamp(fa, -0.95, 0.8) * 0.55;
     this.atk = { step, def, t: 0, hit: new Set(), charge, connected: false, tilt, prevA: atkPose(def, 0).a + tilt }; this.combo = step + 1; this.comboT = 0.55;
@@ -255,9 +261,10 @@ class Captain extends Actor {
     }
     // smear: the arc the weapon tip swept over the last few frames
     const tail = atkPose(d, Math.max(d.hit[0] - 0.03, A.t - (d.heavy ? 0.06 : 0.045))).a + (A.tilt || 0);
-    this.smear = A.t >= d.hit[0] - 0.03 && A.t <= d.hit[1] + 0.07 ? { from: tail, to: p.a, r: (this.weapon === 'cutlass' ? 27 : 38) + (A.charge || 0) * 4, heavy: d.heavy, k: A.t <= d.hit[1] ? 1 : 1 - (A.t - d.hit[1]) / 0.07 } : null;
+    this.smear = A.t >= d.hit[0] - 0.03 && A.t <= d.hit[1] + 0.07 ? { from: tail, to: p.a, r: (MELEE[this.weapon] || MELEE.oar).r + (A.charge || 0) * 4, heavy: d.heavy, col: weaponSmear(this.weapon, d), k: A.t <= d.hit[1] ? 1 : 1 - (A.t - d.hit[1]) / 0.07 } : null;
     if (d.dash && !A.rode && A.charge >= 0.99 && Bon.has(9)) { A.rode = true; const w = Waves.spawn(this, d.dmg * 0.5); Bon.ride(w); }
     if (d.dash && A.t <= d.hit[1]) { this.vu = this.face * (650 + A.charge * 450); this.iframes = Math.max(this.iframes, 0.1); if (Math.random() < 0.8) FX.burst(this.x - this.face * 10, this.y - 20, { n: 1, angle: this.face > 0 ? Math.PI : 0, spread: 0.3, speed: 120, size: 2, color: 'b4', grav: 0, life: 0.25, kind: 'mist', water: false }); }
+    if (d.onStrike && !A.struck && A.t >= (d.strikeAt ?? d.hit[0] + 0.03)) { A.struck = true; d.onStrike(this, A, G); }
     if (A.t >= d.hit[0] && A.t <= d.hit[1]) { if (d.dash) this.hitScan(G, d, A, -0.9, 0.9); else this.hitScan(G, d, A, A.prevA, p.a); }
     A.prevA = p.a;
     if (d.name === 'slam' && A.t >= 0.235 && !A.stomped && !this.air) { A.stomped = true; const t = this.tipWorld(); FX.burst(t.x, t.y, { n: 10, angle: -Math.PI / 2, spread: 1.3, speed: 220, size: 2, color: 'w4', color2: 'w2', grav: 900, life: 0.5, kind: 'splinter' }); FX.burst(t.x, t.y, { n: 6, angle: -Math.PI / 2, spread: 1.4, speed: 80, size: 3, color: 'n7', grav: 0, life: 0.4, kind: 'mist' }); Sfx.play('wood', this.pan(), 0.7); if (!A.connected) Cam.shake(0.12); }
@@ -276,7 +283,7 @@ class Captain extends Actor {
       G.comboN = G.comboT > 0 ? (G.comboN || 0) + 1 : 1; G.comboT = 1.4; UI.comboPop = 1;
     };
     for (const e of G.enemies) {
-      if (e.dead || A.hit.has(e) || e.water) continue;
+      if (e.dead || A.hit.has(e) || e.water || e.phased > 0) continue;
       const rx = (e.cx - sh.x) * f, ry = e.cy - sh.y, dist = Math.hypot(rx, ry), psi = Math.atan2(ry, rx);
       if (!(dist < 26 || (dist <= reach + 18 * e.scale && inArc(psi, a0, a1, 0.5)))) continue;
       A.hit.add(e);
@@ -286,7 +293,10 @@ class Captain extends Actor {
       if (guarding && Math.sign(this.x - e.x) === e.face && !d.heavy) {
         e.cool = 0.06; e.counter = true; e.waitT = 99;
         e.hurt(dmg * 0.15, f * 180, -40, { stun: 0.14 }); Sfx.play('clang', e.pan()); FX.sparks(e.x + e.face * 12, e.y - 40, 14, f > 0 ? Math.PI : 0); FX.stop(0.05); e.jitter = 0.1;
-        FX.hitSpark(e.x + e.face * 12, e.y - 40, f > 0 ? Math.PI : 0, false); FX.text(e.x, e.y - 84, '格挡', '#c8d0d8', 18, 0.6); continue;
+        FX.hitSpark(e.x + e.face * 12, e.y - 40, f > 0 ? Math.PI : 0, false); FX.text(e.x, e.y - 84, '格挡', '#c8d0d8', 18, 0.6);
+        // obsidian shields bite back
+        if (e.stats.thorns && this.hurt(e.stats.thorns * (1 + G.step * 0.04), -f * 240, -140, { stun: 0.12 })) { FX.burst(e.x + e.face * 12, e.y - 40, { n: 10, speed: 260, size: 1, color: 'f5', color2: 'f3', grav: 400, life: 0.4, water: false }); FX.text(this.x, this.y - 84, '反刺', '#ff9a7a', 16, 0.6); UI.pulse('hurt'); }
+        continue;
       }
       if (guarding && Math.sign(this.x - e.x) === e.face && d.heavy) { e.blocking = false; e.guardT = 0; e.guardBreak = 1.4; FX.text(e.x, e.y - 84, '破防', '#ffd46a', 20, 0.7); Sfx.play('clang', e.pan(), 0.8); }
       const marked = e.marked > 0, crit = marked || Math.random() < this.critChance(d, A), cm = crit ? 2 : 1; if (marked) { e.marked = 0; FX.text(e.x, e.y - 100, '标记暴击', '#ff9a7a', 18, 0.8); }
@@ -298,6 +308,7 @@ class Captain extends Actor {
       connect(cx, cy, d.heavy, e);
       if (d.finisher && e.hp > 0) Bon.coopDive(e);
       if (this.weapon === 'cutlass' && e.hp > 0) { e.bleedN = Math.min(3 + (G.ups.cutlass || 0), (e.bleedN || 0) + 1); e.bleedT = 3.2; }
+      if (d.onHit) d.onHit(this, e, dmg * mul * cm, G);
       Sfx.play(d.heavy ? 'heavy' : 'hit', e.pan());
       if (d.charged) Sfx.play('crack', e.pan(), 0.6);
       if (e.hp <= 0) G.kill(e, this);
@@ -397,6 +408,7 @@ class Enemy extends Actor {
     // on an enemy vessel, not with the captain: throw, board or wait
     if (this.ship && this.ship !== ps && cap.ship !== this.ship) {
       const s = this.ship;
+      if (this.stats.leaper && G.state === 'fight' && (this.leapCd = (this.leapCd ?? rand(0.6, 1.8)) - dt) <= 0 && Math.abs(this.x - ps.x) < 1000) { this.leapCd = 99; this.leapTo(G, ps); FX.text(this.x, this.y - 80, '嗷呜！', '#c8d0d8', 16, 0.7); return; }
       this.face = Math.sign(ps.x - this.x) || 1;
       if (s.kind === 'skiff') {
         if (this.role === 'thrower' && (this.skiffT = (this.skiffT || 0) + dt) < 14) { if (s.docked || Math.abs(s.x - ps.x) < 700) this.rangedAttack(dt, G, cap); }
@@ -485,20 +497,22 @@ class Enemy extends Actor {
     this.walkV = this.vu; this.anim += dt * (Math.abs(this.vu) * 0.045 + 1);
   }
   rangedAttack(dt, G, cap) {
-    const shot = this.stats.shot || 'axe', wind = shot === 'hook' ? 1.0 : shot === 'arrow' ? 0.75 : 0.55;
+    const shot = this.stats.shot || 'axe', SP = SHOTS[shot], bow = shot === 'arrow' || (SP && SP.bow), wind = shot === 'hook' ? 1.0 : bow ? 0.75 : SP ? SP.wind : 0.55;
     if (this.rope && this.rope.busy()) { this.spinHook = 0; return; }
     if (this.x < Cam.viewL() + 30 || this.x > Cam.viewR() - 30) { this.throwCd = Math.max(this.throwCd, 1.2); this.tell = 0; this.nock = 0; this.spinHook = 0; return; }
     this.throwCd -= dt; this.nock = 0; this.spinHook = 0;
     const dx = (cap.x - this.x) * this.face, dy = cap.y - 40 - (this.y - 40), aim = Math.atan2(dy, Math.max(20, dx));
     if (this.throwCd < wind) {
       const u = 1 - this.throwCd / wind; this.tell = u > 0.6 ? 1 : 0;
-      if (shot === 'arrow') { this.weaponA = aim - 0.25 - HALF_PI; this.nock = u; this.atkLean = -1; }
+      if (bow) { this.weaponA = aim - 0.25 - HALF_PI; this.nock = u; this.atkLean = -1; }
+      else if (SP) { this.weaponA = damp(this.weaponA, -2.9 - HALF_PI, 8, dt); this.atkLean = -1; if (Math.random() < 0.6) FX.burst(this.x + this.face * 4, this.y - 80 * this.scale, { n: 1, speed: 50, size: 1, color: SP.col || 'f5', grav: -40, life: 0.3, water: false }); }
       else if (shot === 'hook') { this.spinHook = u * 22; this.weaponA = damp(this.weaponA, -2.6 - HALF_PI, 8, dt); }
       else { this.weaponA = damp(this.weaponA, -2.3 - HALF_PI, 10, dt); this.atkLean = -2; if (shot === 'pot' && Math.random() < 0.5) FX.burst(this.x - this.face * 6, this.y - 76, { n: 1, speed: 40, size: 1, color: 'f5', grav: -60, life: 0.2, water: false }); }
-    } else { this.weaponA = damp(this.weaponA, shot === 'arrow' ? aim - HALF_PI : 0.5, 4, dt); this.atkLean = damp(this.atkLean || 0, 0, 6, dt); }
+    } else { this.weaponA = damp(this.weaponA, bow ? aim - HALF_PI : 0.5, 4, dt); this.atkLean = damp(this.atkLean || 0, 0, 6, dt); }
     if (this.throwCd <= 0) {
       this.tell = 0; this.atkLean = 2;
-      if (shot === 'arrow') { this.throwCd = rand(2.4, 3.2); G.shootArrow(this, cap); }
+      if (SP) { this.throwCd = rand(SP.cd[0], SP.cd[1]); SP.fire(G, this, cap); this.weaponA = bow ? aim - HALF_PI : 0.8 - HALF_PI; }
+      else if (shot === 'arrow') { this.throwCd = rand(2.4, 3.2); G.shootArrow(this, cap); }
       else if (shot === 'pot') { this.throwCd = rand(3.4, 4.6); G.throwPot(this, cap); this.weaponA = 0.8 - HALF_PI; }
       else if (shot === 'ice') { this.throwCd = rand(3, 4.2); G.throwIce(this, cap); this.weaponA = 0.8 - HALF_PI; }
       else if (shot === 'hawk') { this.throwCd = rand(5.5, 7.5); G.releaseHawk(this); this.weaponA = -2.6 - HALF_PI; }
@@ -549,13 +563,14 @@ class Projectile {
   constructor(o) { Object.assign(this, { x: 0, y: 0, vx: 0, vy: 0, dmg: 10, team: 'player', kind: 'bolt', life: 3, hitSet: new Set(), grav: 380, spin: 0, a: 0, pierce: 0, dead: false }, o); }
   update(dt, G) {
     this.life -= dt; if (this.life <= 0) this.dead = true;
+    if (this.tick) this.tick(this, dt, G);
     if (this.kind === 'pot') this.a += dt * 9;
-    this.vy += this.grav * dt; this.vx += WIND.v * (this.kind === 'bolt' ? 90 : 60) * dt;
+    this.vy += this.grav * dt; if (!this.float) this.vx += WIND.v * (this.kind === 'bolt' ? 90 : 60) * dt;
     const steps = 3;
     for (let s = 0; s < steps && !this.dead; s++) {
       this.x += this.vx * dt / steps; this.y += this.vy * dt / steps; this.a = this.kind === 'axe' ? this.a + dt * 18 / steps : Math.atan2(this.vy, this.vx);
-      if (this.team === 'player') G.boltHits(this); else G.enemyShotHits(this);
-      if (this.y > Sea.height(this.x) + 4 && !this.dead) { this.dead = true; FX.splash(this.x, 0.35); }
+      if (this.hit) this.hit(this, G); else if (this.team === 'player') G.boltHits(this); else G.enemyShotHits(this);
+      if (!this.float && this.y > Sea.height(this.x) + 4 && !this.dead) { this.dead = true; FX.splash(this.x, 0.35); if (this.onSea) this.onSea(this); }
     }
     if (this.kind === 'bolt' && Math.random() < 0.5) FX.burst(this.x, this.y, { n: 1, speed: 10, size: 3, color: 'm4', grav: -20, life: 0.3, kind: 'mist', water: false });
   }
@@ -572,6 +587,7 @@ class Projectile {
     else if (this.kind === 'pellet') { const c = Math.cos(this.a), sn = Math.sin(this.a); P.line(ctx, bx - c * 5, by - sn * 5, bx, by, C[this.crit ? 'gold' : 'm4'], 1); P.dot(ctx, bx, by, C[this.fire ? 'f5' : 'b4']); }
     else if (this.kind === 'ice') { P.disc(ctx, bx, by, 4, C.ink); P.disc(ctx, bx, by, 3, C.n8); P.dot(ctx, bx - 1, by - 1, C.white, 2); if (Math.random() < 0.7) FX.burst(this.x, this.y, { n: 1, speed: 20, size: 1, color: 'b4', grav: 0, life: 0.3, water: false }); FX.light(this.x, this.y, 60, [150, 220, 255], 0.7); }
     else if (this.kind === 'pot') { blitRot(ctx, SPR.pot, bx, by, this.a, 3, 4); if (Math.random() < 0.6) FX.burst(this.x, this.y - 6, { n: 1, speed: 20, size: 1, color: 'f5', grav: -40, life: 0.2, water: false }); }
+    else if (PROJ_DRAW[this.kind]) PROJ_DRAW[this.kind](ctx, this, bx, by);
     else blitRot(ctx, SPR.axe, bx, by, this.a, 1, 6);
   }
 }
@@ -676,7 +692,7 @@ const Waves = {
       w.life -= dt; w.x += w.f * w.v * dt; w.v *= Math.exp(-2.2 * dt);
       if (Math.random() < 0.8) FX.burst(w.x - w.f * 10, w.y + rand(-24, 24), { n: 1, angle: w.f > 0 ? Math.PI : 0, spread: 0.3, speed: 80, size: 1, color: 'b4', grav: 0, life: 0.25, water: false });
       for (const e of G.enemies) {
-        if (e.dead || e.water || w.hit.has(e) || Math.abs(e.cx - w.x) > (w.tornado ? 44 : 26) || Math.abs(e.cy - w.y) > (w.tornado ? 80 : 56)) continue;
+        if (e.dead || e.water || e.phased > 0 || w.hit.has(e) || Math.abs(e.cx - w.x) > (w.tornado ? 44 : 26) || Math.abs(e.cy - w.y) > (w.tornado ? 80 : 56)) continue;
         w.hit.add(e); const crit = Math.random() < 0.3, dmg = w.dmg * (crit ? 2 : 1);
         e.hurt(dmg, w.f * (w.tornado ? 520 : 760), w.tornado ? -760 : -420, { stun: 0.7 }); FX.hitSpark(e.cx, e.cy, w.f > 0 ? 0 : Math.PI, true); FX.stop(0.05); Sfx.play('heavy', e.pan(), 0.9);
         if (crit) critFX(e.cx, e.cy - 20, dmg); if (e.hp <= 0) G.kill(e, G.captain);

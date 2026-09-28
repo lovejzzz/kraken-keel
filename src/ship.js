@@ -72,8 +72,9 @@ class Ship {
     return p.map((q) => ({ ...q, ship: this }));
   }
   update(dt) {
-    const dx = this.tx - this.x;
-    this.vx += clamp(dx * 0.6 - this.vx * 0.9, -this.accel, this.accel) * dt;
+    // sail toward the target no faster than it can still brake in time, so ships come alongside instead of ramming through
+    const dx = this.tx - this.x, vt = Math.sign(dx) * Math.min(Math.abs(dx) * 0.9, Math.sqrt(2 * this.accel * Math.abs(dx)) * 0.85);
+    this.vx += clamp((vt - this.vx) * 2.5, -this.accel, this.accel) * dt;
     this.x += this.vx * dt;
     const n = 5; let sh = 0, sxh = 0, sxx = 0;
     for (let i = 0; i < n; i++) { const lx = lerp(-this.L * 0.8, this.L * 0.8, i / (n - 1)); const h = Sea.height(this.x + lx); sh += h; sxh += lx * h; sxx += lx * lx; }
@@ -92,8 +93,8 @@ class Ship {
     for (const b of this.breaches) { b.t += dt; if (Math.random() < dt * 22) { const p = this.toWorld(b.lx, b.ly + 4); FX.burst(p.x, p.y, { n: 1, angle: Math.PI * 0.5, spread: 0.5, speed: 90, size: 2, color: 'foam', color2: 't7', grav: 800, life: 0.5, kind: 'drop' }); } }
   }
   damage(d, lx = 0) {
-    if (this.hull <= 0) return;
-    if (this.team === 'player' && G.ups && G.ups.plate) d *= 1 - 0.15 * G.ups.plate;
+    if (this.hull <= 0 || this.bossShip) return;
+    if (this.team === 'player' && G.ups && G.ups.plate) d *= 1 - Math.min(0.6, 0.12 * G.ups.plate);
     this.hull = Math.max(0, this.hull - d); this.hit = 1; this.flash = 1;
     this.va += (Math.random() < 0.5 ? -1 : 1) * d * 0.004;
     const p = this.toWorld(lx, this.deckBase + 18);
@@ -114,6 +115,7 @@ class Ship {
     g.quadraticCurveTo(L + 34, -58, L + 22, -150);
     g.lineTo(L + 8, -150); g.quadraticCurveTo(L + 12, -74, L - 84, -46); g.lineTo(-L + 84, -46); g.quadraticCurveTo(-L - 12, -72, -L - 8, -146); g.closePath();
   }
+  setLook(look) { this.look = look; this.build(); }
   build() {
     const P0 = SHIPPAL[this.pal], L = this.L, W = Math.ceil((2 * L + 100) * S), H = Math.ceil(220 * S);
     this.px = Math.round(W / 2); this.py = Math.round(170 * S); // pivot (waterline centre) inside the sprite
@@ -138,6 +140,17 @@ class Ship {
       }
       if ((x + 3) % 11 === 0) { const y = top + Math.round(span * 0.35); if (inside(x, y)) { g.fillStyle = C.b1; g.fillRect(x, y, 1, 1); } }
     }
+    // the player's upgrades show on the hull: iron straps and rivets with plating, full steel cladding at the top levels
+    const look = this.look || {}, pl = look.plate || 0, kl = look.keel || 0;
+    if (pl > 0) for (let x = 0; x < W; x++) {
+      let top = -1, bot = -1; for (let y = 0; y < H; y++) if (inside(x, y)) { if (top < 0) top = y; bot = y; }
+      if (top < 0) continue; const span = bot - top + 1;
+      if (pl >= 5) for (let y = top + Math.round(span * 0.42); y <= bot; y++) if (inside(x, y)) { g.fillStyle = C[(x * 7 + y * 3) % 23 === 0 ? 'm4' : (y - top) % 5 === 0 || x % 13 === 0 ? 'm0' : 'm2']; g.fillRect(x, y, 1, 1); }
+      for (const d of [0.3, 0.52, 0.7, 0.86].slice(0, Math.min(4, pl))) {
+        const y = top + Math.round(span * d); if (!inside(x, y)) continue;
+        g.fillStyle = C[x % 6 === 0 ? 'm4' : 'm2']; g.fillRect(x, y, 1, 1); if (inside(x, y + 1)) { g.fillStyle = C.m0; g.fillRect(x, y + 1, 1, 1); }
+      }
+    }
     // outline
     const od = g.getImageData(0, 0, W, H), o = od.data;
     const solid = (x, y) => x >= 0 && y >= 0 && x < W && y < H && o[(y * W + x) * 4 + 3] > 0;
@@ -148,9 +161,10 @@ class Ship {
     if (this.kind !== 'skiff') {
       // prow dragon and stern curl
       const hp = { x: this.px + Math.round((L + 16) * S) * this.dir, y: this.py + Math.round(-150 * S) };
-      const dimg = this.pal === 'player' ? SPR.dragon : (SPR['dragon_' + this.pal] || recolor('dragon_' + this.pal, 'dragon', { h: P0.head[0], H: P0.head[2], e: P0.eye }));
+      const tier = kl >= 6 ? 'rune' : kl >= 4 ? 'gold' : kl >= 2 ? 'bronze' : null, TS = { bronze: { h: 'f2', H: 'f3', e: 'f5' }, gold: { h: 'gold', H: 'f5', e: 'r4' }, rune: { h: 'gold', H: 'f6', e: 'g2' } };
+      const dimg = this.pal === 'player' ? (tier ? SPR['dragon_' + tier] || recolor('dragon_' + tier, 'dragon', TS[tier]) : SPR.dragon) : (SPR['dragon_' + this.pal] || recolor('dragon_' + this.pal, 'dragon', { h: P0.head[0], H: P0.head[2], e: P0.eye }));
       blit(g, dimg, hp.x, hp.y, this.dir < 0, 2, 14);
-      const cimg = this.pal === 'player' ? SPR.curl : (SPR['curl_' + this.pal] || recolor('curl_' + this.pal, 'curl', { h: P0.head[0], H: P0.head[2] }));
+      const cimg = this.pal === 'player' ? (kl >= 4 ? SPR.curl_gold || recolor('curl_gold', 'curl', { h: 'gold', H: 'f5' }) : SPR.curl) : (SPR['curl_' + this.pal] || recolor('curl_' + this.pal, 'curl', { h: P0.head[0], H: P0.head[2] }));
       blit(g, cimg, this.px - Math.round((L + 14) * S) * this.dir, this.py + Math.round(-146 * S), this.dir < 0, 5, 10);
       // gunwale rail
       g.fillStyle = C[wood[5] || wood[4]]; g.fillRect(this.px - Math.round((L - 84) * S), this.py + Math.round(-46 * S), Math.round((2 * L - 168) * S), 1); g.fillStyle = C[wood[1]]; g.fillRect(this.px - Math.round((L - 84) * S), this.py + Math.round(-46 * S) + 1, Math.round((2 * L - 168) * S), 1);
@@ -164,7 +178,7 @@ class Ship {
       const sc = offscreen(W, H), sg = sc.getContext('2d'); let i = 0;
       for (let x = -L + 96; x <= L - 96; x += 34, i++) {
         const pal = P0.shields[i % P0.shields.length], rows = i % 3 === 1 ? SHIELD_ROWS2 : SHIELD_ROWS;
-        const s = sprite(`sh_${this.pal}_${i % P0.shields.length}_${i % 3 === 1}`, rows, { a: pal[0], b: pal[1], m: 'm3' });
+        const gold = this.pal === 'player' && kl >= 3, s = sprite(`sh_${this.pal}_${i % P0.shields.length}_${i % 3 === 1}_${gold}`, rows, { a: pal[0], b: pal[1], m: gold ? 'gold' : 'm3' });
         blit(sg, s, this.px + Math.round(x * S) - 4, this.py + Math.round(-26 * S) - 3);
         sg.fillStyle = C.ink; sg.fillRect(this.px + Math.round(x * S) - 3, this.py + Math.round(-26 * S) + 4, 7, 1);
       }
@@ -203,6 +217,8 @@ class Ship {
       g.fillStyle = C[P0.sailD[si]]; g.fillRect(cx + x, y1 - 3, 1, 3);
       for (let yy = y0 + 6; yy < y1 - 3; yy += 6) { if ((x & 1) === 0) g.fillRect(cx + x, yy, 1, 1); }
       g.fillStyle = C.w0; g.fillRect(cx + x, y1, 1, 1);
+      // a gold hem, and an emblem in the middle of a well-kept sail
+      if (this.look && this.look.keel >= 5) { g.fillStyle = C.gold; g.fillRect(cx + x, y0, 1, 1); g.fillRect(cx + x, y1 - 1, 1, 1); if (Math.abs(x) <= 6) { const cyy = Math.round((y0 + y1) / 2), h = Math.round(Math.sqrt(Math.max(0, 36 - x * x))); g.fillStyle = C.f5; g.fillRect(cx + x, cyy - h, 1, 1); g.fillRect(cx + x, cyy + h, 1, 1); if (Math.abs(x) < 2) { g.fillStyle = C.gold; g.fillRect(cx + x, cyy - 3, 1, 7); } } }
       for (let i = 0; i < tears; i++) { const tx = -yw + Math.floor(hash1(i + this.bobSeed) * 2 * yw), ty = y0 + 4 + Math.floor(hash1(i * 3.3 + this.bobSeed) * (y1 - y0 - 12)); if (Math.abs(x - tx) < 3) { g.clearRect(cx + x, ty + Math.abs(x - tx), 1, 5 - Math.abs(x - tx)); } }
     }
     const pivotY = base + Math.round(40 * S);

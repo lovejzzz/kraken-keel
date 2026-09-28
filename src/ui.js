@@ -77,7 +77,7 @@ const UI = {
     addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && this.screen === 'settings') { this.screen = this.settingsBack || 'title'; return; }
       if (e.key === 'Escape' && (this.screen === 'bon' || this.screen === 'cap')) { this.screen = 'refit'; return; }
-      if (e.key === 'Escape') { if (this.screen === 'how') this.screen = 'title'; else if (G.state === 'fight' || G.state === 'won') this.pause(!this.paused); }
+      if (e.key === 'Escape') { if (this.screen === 'how' || this.screen === 'chsel') this.screen = 'title'; else if (G.state === 'fight' || G.state === 'won') this.pause(!this.paused); }
       if ((e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') && this.screen === 'loot' && this.loot && this.loot.t > 1.6) { this.loot.done(); return; }
       if (e.key === 'Enter' && this.screen === 'title') { const sv = Save.get(); if (sv) { Sfx.init(); Save.load(sv); } else this.start(); }
       if (e.key === 'm' || e.key === 'M') { Sfx.init(); const on = !(Settings.music || Settings.sfx); Settings.music = Settings.sfx = on; Settings.save(); Sfx.apply(); G.banner(on ? '声音开' : '静音', '', '#e8dcbc', 0.6); }
@@ -105,8 +105,8 @@ const UI = {
   route() { this.screen = 'map'; }, refit(harbor) { this.screen = 'refit'; this.selSlot = -1; this.slotOpts = null; G.banner(harbor ? '港口' : '修整', harbor ? '商店八折' : '点甲板空位建造 · 左边照顾船长和 Bon · 下方修船', '#9fe8b0', 2.2); },
   end(won) {
     this.screen = 'end'; this.won = won; this.record = won && (G.chapter === 1 || G.fullRun) ? Save.record(G.chapter, G.stats.time) : false;
-    if (won && G.chapter === 1) { Save.unlock('ch2'); Save.write('ch2'); }
-    if (won && G.chapter === 2) { Save.unlock('won'); Save.clear(); }
+    if (won && G.chapter < 5) { Save.unlock('ch' + (G.chapter + 1)); Save.write('ch' + (G.chapter + 1)); }
+    if (won && G.chapter === 5) { Save.unlock('won'); Save.unlock('won5'); Save.clear(); }
   },
   hideAll() { if (this.screen !== 'title') this.screen = null; }, hud() {},
 
@@ -174,6 +174,7 @@ const UI = {
     else if (this.screen === 'pause') this.drawPause(ctx, W, H);
     else if (this.screen === 'end') this.drawEnd(ctx, W, H);
     else if (this.screen === 'settings') this.drawSettings(ctx, W, H);
+    else if (this.screen === 'chsel') this.drawChapters(ctx, W, H);
     // a gear in the corner opens the settings from anywhere in a voyage
     if (G.state !== 'title' && !['title', 'how', 'settings', 'pause', 'end', 'event', 'bon', 'cap', 'loot'].includes(this.screen)) {
       this.button(ctx, 'gearbtn', W - 20, 4, 16, 16, '', { fn: () => { if (!this.screen && (G.state === 'fight' || G.state === 'won')) { this.pause(true); this.settingsBack = 'pause'; } else this.settingsBack = this.screen || 'refit'; this.screen = 'settings'; } });
@@ -194,7 +195,7 @@ const UI = {
     digits(ctx, `${Math.max(0, Math.round(ps.hull))}`, 142, 30, C.b3);
     blit(ctx, SPR.coin, 8, 41 - Math.round(this.coinPop * 2)); digits(ctx, Math.max(0, G.silver - Math.ceil(G.silverPending || 0)), 17, 41, this.coinPop > 0.3 ? C.white : C.gold, this.coinPop > 0.6 ? 1 : 1);
     blit(ctx, SPR.gear, 47, 40 - Math.round((this.partPop || 0) * 2)); digits(ctx, G.parts, 56, 41, (this.partPop || 0) > 0.3 ? C.white : C.m4);
-    if (G.wpn) { const wx = 118, ic = SPR[UPGRADES[cap.weapon].icon], n = ['oar', 'cutlass', 'scatter'].filter((k) => G.wpn.own[k]).length; P.rect(ctx, wx, 38, 14, 12, C.ink); P.rect(ctx, wx + 1, 39, 12, 10, C.n2); ctx.drawImage(ic, 0, 0, ic.width, ic.height, wx + 2, 40, 10, 8); if (n > 1 && !Touch.on) text(ctx, 'Q', wx + 17, 38, { size: 8, color: C.b1, shadow: false }); }
+    if (G.wpn) { const wx = 118, ic = SPR[UPGRADES[cap.weapon].icon], n = WEAPONS.filter((k) => G.wpn.own[k]).length; P.rect(ctx, wx, 38, 14, 12, C.ink); P.rect(ctx, wx + 1, 39, 12, 10, C.n2); ctx.drawImage(ic, 0, 0, ic.width, ic.height, wx + 2, 40, 10, 8); if (n > 1 && !Touch.on) text(ctx, 'Q', wx + 17, 38, { size: 8, color: C.b1, shadow: false }); }
     if (Bon.d) { const bx = 78; blit(ctx, SPR.bon_head, bx, 39); digits(ctx, String(Bon.d.lv), bx + 9, 41, C.f5); P.rect(ctx, bx + 17, 41, 16, 4, C.ink); P.rect(ctx, bx + 18, 42, Math.round(14 * Bon.full / 100), 2, Bon.hungry() ? (Math.floor(G.t * 3) % 2 ? C.r4 : C.r2) : C.f4); }
     this.drawCoins(ctx, 1 / 60);
     if (ps.breaches.length && G.state === 'fight') text(ctx, `${ps.breaches.length} 处破洞在漏水 · 站过去按住 E`, 8, 50, { size: 10, color: Math.floor(G.t * 3) % 2 ? C.r4 : C.f4 });
@@ -212,10 +213,10 @@ const UI = {
     P.rect(ctx, wx - (dir > 0 ? 0 : len), wy, len, 1, C.b2); P.dot(ctx, wx + dir * len, wy, C.b3); P.dot(ctx, wx + dir * (len - 1), wy - 1, C.b3); P.dot(ctx, wx + dir * (len - 1), wy + 1, C.b3);
     // boss
     const K = G.kraken || G.boss;
-    if (K) { const bw = Math.min(220, W - 120), bx = Math.round(W / 2 - bw / 2), by = H - 16, wy = K === G.boss; blit(ctx, wy ? SPR.n_wyrm : SPR.eyeicon, bx - (wy ? 14 : 12), by - (wy ? 4 : 1)); text(ctx, wy ? '霜龙' : '海妖', bx, by - 13, { size: 10, color: wy ? C.n8 : C.g2 }); if (wy && K.phase > 1) text(ctx, `阶段 ${K.phase}`, bx + bw, by - 13, { size: 9, align: 'right', color: K.phase === 3 ? C.r4 : C.b2 }); this.bar(ctx, bx, by, bw, 5, K.hp / K.max, wy ? (K.phase === 3 ? C.r3 : C.n7) : C.k5, C.k0); }
+    if (K) { const bw = Math.min(220, W - 120), bx = Math.round(W / 2 - bw / 2), by = H - 16, wy = K === G.boss; blit(ctx, wy ? SPR[K.icon || 'n_wyrm'] : SPR.eyeicon, bx - (wy ? 14 : 12), by - (wy ? 4 : 1)); text(ctx, wy ? K.name : '海妖', bx, by - 13, { size: 10, color: wy ? K.col || C.n8 : C.g2 }); if (wy && K.phase > 1) text(ctx, `阶段 ${K.phase}`, bx + bw, by - 13, { size: 9, align: 'right', color: K.phase === 3 ? C.r4 : C.b2 }); this.bar(ctx, bx, by, bw, 5, K.hp / K.max, wy ? (K.phase === 3 ? C.r3 : C[K.bar || 'n7']) : C.k5, C.k0); if (wy && K.shield) { const sw = Math.round(bw * K.shield()); if (sw > 0) { P.rect(ctx, bx, by - 3, sw, 2, C.g2); } } }
     // hint
     const intro = G.state === 'fight' && G.step <= 1 && G.encT < 25;
-    const wHint = { oar: '左键 挥桨 · 按住或右键 蓄力 · 空格 跳（可二段跳） · Shift 翻滚', cutlass: '左键 快斩 · 按住或右键 冲刺斩 · 空格 跳（可二段跳） · Shift 翻滚', scatter: '左键 朝鼠标射击 · 按住或右键 蓄力穿透 · 空格 跳（可二段跳） · Shift 翻滚' }[cap.weapon];
+    const wHint = { oar: '左键 挥桨 · 按住或右键 蓄力 · 空格 跳（可二段跳） · Shift 翻滚', cutlass: '左键 快斩 · 按住或右键 冲刺斩 · 空格 跳（可二段跳） · Shift 翻滚', scatter: '左键 朝鼠标射击 · 按住或右键 蓄力穿透 · 空格 跳（可二段跳） · Shift 翻滚', axe: '左键 重劈（会点燃） · 按住或右键 蓄力火焰地裂 · 空格 跳 · Shift 翻滚', harpoon: '左键 掷叉把敌人拽过来 · 按住或右键 把自己拽过去 · 空格 跳 · Shift 翻滚', hammer: '左键 锤击引出闪电链 · 按住或右键 掷出回旋锤召雷 · 空格 跳 · Shift 翻滚' }[cap.weapon];
     const hint = Touch.on && !G.hint ? '' : G.hint || (G.state === 'refit' ? 'A/D 走动 · 点甲板上的空位建造' : intro || this.swapHintT > 0 ? wHint : '');
     this.swapHintT = Math.max(0, (this.swapHintT || 0) - 1 / 60); if (this.lastW && this.lastW !== cap.weapon) this.swapHintT = 3; this.lastW = cap.weapon;
     if (hint && !this.screen && !K) { ctx.font = `600 10px ${FONT}`; const tw = Math.min(W - 16, ctx.measureText(tr(hint)).width + 12); P.rect(ctx, W / 2 - tw / 2, H - 18, tw, 14, C.n1); P.rect(ctx, W / 2 - tw / 2, H - 18, tw, 1, C.n3); text(ctx, hint, W / 2, H - 16, { size: 10, align: 'center', color: C.b2 }); }
@@ -247,11 +248,12 @@ const UI = {
     this.button(ctx, 'start', cx - 76, yy, 72, 18, confirm ? '确定重来？' : save ? '新航程' : '启 航', { primary: !save || confirm, size: save ? 10 : 12, fn: () => { if (save && !confirm) { this.confirmNew = G.t; return; } this.confirmNew = 0; this.start(); } });
     this.button(ctx, 'how', cx + 4, yy, 72, 18, '操作说明', { size: 11, fn: () => { Sfx.init(); this.screen = 'how'; } });
     yy += 22;
-    if (prog.ch2) { this.button(ctx, 'ch2', cx - 76, yy, 72, 16, '从第二章开始', { size: 9, fn: () => { Sfx.init(); Sfx.play('ui'); Save.startAt2(); } }); this.button(ctx, 'set', cx + 4, yy, 72, 16, '设置', { size: 10, fn: () => { Sfx.init(); this.settingsBack = 'title'; this.screen = 'settings'; } }); }
+    if (Save.reach() > 1) { this.button(ctx, 'chsel', cx - 76, yy, 72, 16, '选择章节', { size: 10, fn: () => { Sfx.init(); Sfx.play('ui'); this.screen = 'chsel'; } }); this.button(ctx, 'set', cx + 4, yy, 72, 16, '设置', { size: 10, fn: () => { Sfx.init(); this.settingsBack = 'title'; this.screen = 'settings'; } }); }
     else this.button(ctx, 'set', cx - 36, yy, 72, 16, '设置', { size: 10, fn: () => { Sfx.init(); this.settingsBack = 'title'; this.screen = 'settings'; } });
     yy += 22;
     const b = Save.best(), fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
-    if (b.c1 != null) text(ctx, b.c2 != null ? `最快通关 · 第一章 ${fmt(b.c1)} · 全部 ${fmt(b.c2)}` : `最快通关 · 第一章 ${fmt(b.c1)}`, cx, yy, { size: 9, align: 'center', color: C.f4 });
+    const far = [5, 4, 3, 2].find((n) => b['c' + n] != null);
+    if (b.c1 != null) text(ctx, far ? `最快 · 第一章 ${fmt(b.c1)} · 一路到第 ${far} 章 ${fmt(b['c' + far])}` : `最快通关 · 第一章 ${fmt(b.c1)}`, cx, yy, { size: 9, align: 'center', color: C.f4, fit: W * 0.5 });
     else if (!Touch.on && Math.floor(G.t * 2) % 2) text(ctx, save ? '按 Enter 继续' : '按 Enter 开始', cx, yy, { size: 9, align: 'center', color: C.b0 });
   },
   drawSettings(ctx, W, H) {
@@ -303,7 +305,7 @@ const UI = {
   drawMap(ctx, W, H) {
     const R = { x: 8, y: 8, w: W - 16, h: H - 16 }, M = G.map; if (!M) return;
     P.rect(ctx, R.x - 1, R.y - 1, R.w + 2, R.h + 2, C.ink); TXT.clear(ctx, 0, 0, W, H); ctx.drawImage(this.parchment(R), R.x, R.y);
-    text(ctx, M.ch === 2 ? '航海图 · 冰封北海' : '航海图', R.x + 12, R.y + 6, { size: 14, color: C.w1, bold: true, shadow: C.b1 });
+    text(ctx, M.ch > 1 ? `航海图 · ${CHAPTERS[M.ch].name}` : '航海图', R.x + 12, R.y + 6, { size: 14, color: C.w1, bold: true, shadow: C.b1 });
     text(ctx, this.travel ? '起航……' : '选择下一个目的地', R.x + 12, R.y + 23, { size: 10, color: C.w2, shadow: false });
     // purse and hull at the top right
     { let x = R.x + R.w - 30; const hs = String(Math.round(G.player.hull)), ps = String(G.parts), ss = String(G.silver);
@@ -321,7 +323,7 @@ const UI = {
     let hovered = null;
     for (const n of all) {
       if (n.type === 'start') continue;
-      const p = SeaMap.pos(n, R), T = NODE_TYPES[n.enc === 'wyrm' ? 'wyrm' : n.type], can = avail.has(n.id) && !this.travel, id = 'node_' + n.id, hov = this.hover === id;
+      const p = SeaMap.pos(n, R), T = nodeType(n), can = avail.has(n.id) && !this.travel, id = 'node_' + n.id, hov = this.hover === id;
       const past = n.layer <= cur.layer && !n.visited;
       if (past) ctx.globalAlpha = 0.35;
       if (can) P.ring(ctx, p.x, p.y, 12 + (Math.floor(t * 4) % 2), C.r3);
@@ -343,11 +345,11 @@ const UI = {
     if (this.travel) { const b = SeaMap.pos(this.travel.node, R), u = smooth(this.travel.t); sp = { x: lerp(this.travel.from.x, b.x, u), y: lerp(this.travel.from.y, b.y, u) }; }
     blit(ctx, SPR.n_ship, sp.x - 7, sp.y - 22 + Math.round(Math.sin(t * 3) * 1.5));
     // legend
-    const lg = ['fight', 'elite', 'wreck', 'harbor', 'mystery', M.ch === 2 ? 'wyrm' : 'boss']; let lx = R.x + 12;
+    const lg = ['fight', 'elite', 'wreck', 'harbor', 'mystery', CHAPTERS[M.ch].node]; let lx = R.x + 12;
     for (const k of lg) { const ic = SPR[NODE_TYPES[k].icon]; blit(ctx, ic, lx, R.y + R.h - 17); lx += 15; const w = text(ctx, NODE_TYPES[k].name, lx, R.y + R.h - 16, { size: 9, color: C.w2, shadow: false }); lx += w + 10; }
     // tooltip for the hovered destination
     if (hovered) {
-      const n = hovered, T = NODE_TYPES[n.enc === 'wyrm' ? 'wyrm' : n.type], e = n.enc ? ENC[n.enc] : null, p = SeaMap.pos(n, R);
+      const n = hovered, T = nodeType(n), e = n.enc ? ENC[n.enc] : null, p = SeaMap.pos(n, R);
       const title = e && n.type !== 'boss' ? `${tr(T.name)} · ${tr(e.name)}` : tr(T.name), body = e ? e.sub : T.desc;
       const lines = wrapText(ctx, body, 150, 10), w = 170, h = 34 + lines.length * 12 + (n.enc && n.type !== 'boss' ? 12 : 0);
       // place the tip where it hides the fewest destinations (the ones you can sail to count most)
@@ -477,37 +479,61 @@ const UI = {
     }
     if (t > 1.6) { if (Math.floor(t * 2.5) % 2) text(ctx, '点击继续', cx, H - 22, { size: 10, align: 'center', color: C.b1, outline: true }); this.rects.push({ id: 'lootok', x: 0, y: 0, w: W, h: H, fn: () => L.done() }); }
   },
-  /* the captain's weapons: three picture cards (buy, equip, upgrade), then the crit and charge mods */
+  /* the captain's weapons: six picture cards in two rows (equip, upgrade, the tier the weapon has reached), then the crit and charge mods */
   drawWeapons(ctx, rx, rw, cy) {
-    const cw = Math.floor((rw - 8) / 3), ch = 92;
-    ['oar', 'cutlass', 'scatter'].forEach((k, i) => {
-      const u = UPGRADES[k], own = G.wpn.own[k], cur = G.wpn.cur === k, cx = rx + i * (cw + 4), id = 'wp_' + k, hov = this.hover === id && own, lv = G.ups[k] || 0, mx = G.upMax(k);
-      this.panel(ctx, cx, cy - (hov ? 2 : 0), cw, ch, cur ? 'dark' : 'wood'); const oy = cy - (hov ? 2 : 0);
+    const cw = Math.floor((rw - 8) / 3), ch = 50;
+    let tip = null;
+    WEAPONS.forEach((k, i) => {
+      const u = UPGRADES[k], own = G.wpn.own[k], cur = G.wpn.cur === k, cx = rx + (i % 3) * (cw + 4), ry = cy + Math.floor(i / 3) * (ch + 18), id = 'wp_' + k, hov = this.hover === id, lv = G.ups[k] || 0, mx = G.upMax(k), tier = wTier(k);
+      const oy = ry - (hov && own && !cur ? 2 : 0);
+      this.panel(ctx, cx, oy, cw, ch, cur ? 'dark' : 'wood');
       if (cur) { P.rect(ctx, cx + 1, oy + 1, cw - 2, 1, C.f5); P.rect(ctx, cx + 1, oy + ch - 2, cw - 2, 1, C.f5); }
-      const ic = SPR[u.icon]; P.rect(ctx, cx + 4, oy + 4, cw - 8, 24, C.ink); P.rect(ctx, cx + 5, oy + 5, cw - 10, 22, own ? C.b1 : C.w2); P.rect(ctx, cx + 5, oy + 5, cw - 10, 1, C.b3);
-      ctx.drawImage(ic, 0, 0, ic.width, ic.height, Math.round(cx + cw / 2 - ic.width), Math.round(oy + 16 - ic.height), ic.width * 2, ic.height * 2);
-      if (own) for (let p = 0; p < mx; p++) { const px = cx + cw / 2 - (mx * 6) / 2 + p * 6; P.rect(ctx, px, oy + 30, 5, 4, C.ink); P.rect(ctx, px + 1, oy + 31, 3, 2, p < lv ? C.f5 : C.b0); }
-      text(ctx, u.name, cx + cw / 2, oy + 37, { size: 10, align: 'center', color: cur ? C.f5 : C.b4, bold: true, fit: cw - 6 });
-      wrapText(ctx, u.style, cw - 8, 8).slice(0, 3).forEach((l, j) => text(ctx, l, cx + cw / 2, oy + 49 + j * 9, { size: 8, align: 'center', color: C.b1, shadow: false }));
-      if (!own) { ctx.globalAlpha = 0.6; P.rect(ctx, cx + 5, oy + 5, cw - 10, 22, C.w1); ctx.globalAlpha = 1; blit(ctx, SPR.sk_lock, cx + cw / 2 - 4, oy + 12); text(ctx, u.drop, cx + cw / 2, oy + ch - 13, { size: 8, align: 'center', color: C.f4, bold: true, shadow: false, fit: cw - 6 }); }
-      else text(ctx, cur ? '使用中' : '点击装备', cx + cw / 2, oy + ch - 13, { size: 8, align: 'center', color: cur ? C.green : C.f4, bold: true, shadow: false });
-      this.rects.push({ id, x: cx, y: cy, w: cw, h: ch, disabled: !own || cur, fn: () => { G.wpn.cur = k; Sfx.play('build', 0, 0.7); } });
+      const ic = SPR[u.icon + (tier ? '_t' + tier : '')] || SPR[u.icon]; P.rect(ctx, cx + 4, oy + 4, cw - 8, 22, C.ink); P.rect(ctx, cx + 5, oy + 5, cw - 10, 20, own ? C[['b1', 'm2', 'f2', 'n2'][tier]] : C.w2); P.rect(ctx, cx + 5, oy + 5, cw - 10, 1, C.b3);
+      ctx.drawImage(ic, 0, 0, ic.width, ic.height, Math.round(cx + cw / 2 - ic.width), Math.round(oy + 15 - ic.height), ic.width * 2, ic.height * 2);
+      if (tier) text(ctx, TIER_NAME[tier], cx + cw - 7, oy + 5, { size: 8, align: 'right', color: C[['b4', 'm4', 'gold', 'g2'][tier]], bold: true, shadow: false });
+      if (own) for (let p = 0; p < mx; p++) { const px = Math.round(cx + cw / 2 - (mx * 5) / 2 + p * 5); P.rect(ctx, px, oy + 27, 4, 3, C.ink); P.rect(ctx, px + 1, oy + 28, 2, 1, p < lv ? C[p >= 5 ? 'g2' : p >= 3 ? 'gold' : 'f5'] : C.b0); }
+      text(ctx, u.name, cx + cw / 2, oy + 31, { size: 9, align: 'center', color: cur ? C.f5 : C.b4, bold: true, fit: cw - 6 });
+      if (!own) { ctx.globalAlpha = 0.6; P.rect(ctx, cx + 5, oy + 5, cw - 10, 20, C.w1); ctx.globalAlpha = 1; blit(ctx, SPR.sk_lock, cx + cw / 2 - 4, oy + 10); text(ctx, u.drop, cx + cw / 2, oy + ch - 11, { size: 8, align: 'center', color: C.f4, bold: true, shadow: false, fit: cw - 6 }); }
+      else text(ctx, cur ? '使用中' : '点击装备', cx + cw / 2, oy + ch - 11, { size: 8, align: 'center', color: cur ? C.green : C.f4, bold: true, shadow: false });
+      this.rects.push({ id, x: cx, y: ry, w: cw, h: ch, disabled: !own || cur, fn: () => { G.wpn.cur = k; Sfx.play('build', 0, 0.7); } });
       const upc = G.upCost(k), maxed = lv >= mx;
-      this.button(ctx, 'wu_' + k, cx, cy + ch + 3, cw, 16, !own ? '未拥有' : maxed ? '已满' : `升级 ${upc}`, { size: 9, disabled: !own || maxed || G.silver < upc, fn: () => this.buy(k) });
-      if (this.hover === 'wu_' + k && own && !maxed) this.tip(ctx, u.name, u.desc, cx + cw / 2, cy - 2);
+      this.button(ctx, 'wu_' + k, cx, ry + ch + 2, cw, 13, !own ? '未拥有' : maxed ? '已满' : `升级 ${upc}`, { size: 8, disabled: !own || maxed || G.silver < upc, fn: () => this.buy(k) });
+      if (hov) tip = [u.name, u.style, cx + cw / 2, ry - 2];
+      if (this.hover === 'wu_' + k && own && !maxed) tip = [u.name, u.desc + (lv + 1 === 2 || lv + 1 === 4 || lv + 1 === 6 ? ` · 外观升为${TIER_NAME[wTier(k, lv + 1)]}` : ''), cx + cw / 2, ry - 2];
     });
-    const mw = Math.floor((rw - 4) / 2), my = cy + ch + 24, mh = 32;
+    const mw = Math.floor((rw - 4) / 2), my = cy + 2 * (ch + 18) + 2, mh = 28;
     ['whet', 'rune'].forEach((k, i) => {
       const u = UPGRADES[k], cnt = G.ups[k] || 0, mx = G.upMax(k), full = cnt >= mx, price = G.upCost(k), poor = G.silver < price, dis = full || poor, mxp = rx + i * (mw + 4), id = 'up_' + k, hov = this.hover === id && !dis, oy = my - (hov ? 2 : 0);
       this.panel(ctx, mxp, oy, mw, mh, 'wood');
-      const ic = SPR[u.icon]; P.rect(ctx, mxp + 4, oy + 4, 24, 24, C.ink); P.rect(ctx, mxp + 5, oy + 5, 22, 22, C.b1); ctx.drawImage(ic, 0, 0, ic.width, ic.height, mxp + 16 - ic.width, oy + 16 - ic.height, ic.width * 2, ic.height * 2);
-      text(ctx, u.name, mxp + 32, oy + 4, { size: 10, color: hov ? C.f5 : C.b4, bold: true, fit: mw - 70 });
-      text(ctx, u.desc, mxp + 32, oy + 17, { size: 8, color: C.b1, shadow: false, fit: mw - 70 });
-      for (let p = 0; p < mx; p++) { const px = mxp + mw - 8 - (mx - p) * 6; P.rect(ctx, px, oy + 5, 5, 4, C.ink); P.rect(ctx, px + 1, oy + 6, 3, 2, p < cnt ? C.f5 : C.b0); }
-      if (full) text(ctx, '已满', mxp + mw - 6, oy + mh - 13, { size: 8, align: 'right', color: C.b0, shadow: false });
-      else { const s = String(price); blit(ctx, SPR.coin, mxp + mw - 12 - s.length * 4, oy + mh - 11); digits(ctx, s, mxp + mw - 4 - s.length * 4, oy + mh - 10, poor ? C.r3 : C.gold); }
+      const ic = SPR[u.icon]; P.rect(ctx, mxp + 3, oy + 3, 22, 22, C.ink); P.rect(ctx, mxp + 4, oy + 4, 20, 20, C.b1); ctx.drawImage(ic, 0, 0, ic.width, ic.height, mxp + 14 - ic.width, oy + 14 - ic.height, ic.width * 2, ic.height * 2);
+      text(ctx, u.name, mxp + 29, oy + 3, { size: 9, color: hov ? C.f5 : C.b4, bold: true, fit: mw - 64 });
+      text(ctx, u.desc, mxp + 29, oy + 15, { size: 8, color: C.b1, shadow: false, fit: mw - 64 });
+      for (let p = 0; p < mx; p++) { const px = mxp + mw - 6 - (mx - p) * 5; P.rect(ctx, px, oy + 4, 4, 3, C.ink); P.rect(ctx, px + 1, oy + 5, 2, 1, p < cnt ? C.f5 : C.b0); }
+      if (full) text(ctx, '已满', mxp + mw - 5, oy + mh - 12, { size: 8, align: 'right', color: C.b0, shadow: false });
+      else { const s = String(price); blit(ctx, SPR.coin, mxp + mw - 12 - s.length * 4, oy + mh - 10); digits(ctx, s, mxp + mw - 4 - s.length * 4, oy + mh - 9, poor ? C.r3 : C.gold); }
       this.rects.push({ id, x: mxp, y: my, w: mw, h: mh, disabled: dis, fn: () => this.buy(k) });
     });
+    if (tip) this.tip(ctx, tip[0], tip[1], tip[2], tip[3]);
+  },
+  /* where a voyage may begin: every chapter reached so far */
+  drawChapters(ctx, W, H) {
+    const reach = Save.reach(), b = Save.best(), fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+    const w = Math.min(300, W - 16), rh = 30, h = 40 + 5 * (rh + 4) + 26, x = Math.round(W / 2 - w / 2), y = Math.round(clamp(H / 2 - h / 2, 4, H));
+    P.rect(ctx, 0, 0, W, H, 'rgba(4,6,12,0.6)'); TXT.dim(ctx, 0.6);
+    this.panel(ctx, x, y, w, h, 'wood');
+    text(ctx, '选择章节', x + 12, y + 8, { size: 14, color: C.f5, bold: true });
+    text(ctx, '从后面的章节开始会给一笔起步资金', x + w - 10, y + 12, { size: 8, align: 'right', color: C.b1, shadow: false, fit: w - 100 });
+    for (let n = 1; n <= 5; n++) {
+      const c = CHAPTERS[n], open = n <= reach, ry = y + 32 + (n - 1) * (rh + 4), id = 'chs_' + n, hov = this.hover === id && open;
+      this.panel(ctx, x + 8, ry - (hov ? 1 : 0), w - 16, rh, open ? (hov ? 'deep' : 'dark') : 'wood');
+      const ic = SPR[NODE_TYPES[c.node].icon]; blit(ctx, ic, x + 16, ry + 9);
+      text(ctx, `第 ${n} 章 · ${c.name}`, x + 34, ry + 4, { size: 11, color: open ? c.col : C.b0, bold: true, fit: w - 110 });
+      text(ctx, open ? (n > 1 ? `起步 ${c.starter[0]} 银 · ${c.starter[1]} 零件` : '从头开始的完整航程') : '通关上一章解锁', x + 34, ry + 17, { size: 8, color: open ? C.b2 : C.b0, shadow: false, fit: w - 110 });
+      if (!open) blit(ctx, SPR.sk_lock, x + w - 24, ry + 10);
+      else if (b['c' + n] != null && n === 1) text(ctx, fmt(b.c1), x + w - 14, ry + 10, { size: 9, align: 'right', color: C.f4, shadow: false });
+      this.rects.push({ id, x: x + 8, y: ry, w: w - 16, h: rh, disabled: !open, fn: () => { Sfx.play('ui'); if (n === 1) { this.screen = null; this.start(); } else Save.startAt(n); } });
+    }
+    this.button(ctx, 'chsback', x + w - 76, y + h - 22, 68, 16, '返回', { size: 10, fn: () => { this.screen = 'title'; } });
   },
   /* width of a label in buffer pixels, in the current language */
   tw(ctx, s, size = 9, bold = false) { const m = TXT.for(ctx); m.font = `${bold ? 700 : 600} ${size}px ${FONT}`; return m.measureText(tr(s)).width; },
@@ -528,7 +554,7 @@ const UI = {
     const deckY = y + 8 + 80; P.rect(ctx, lx + 3, deckY, lw - 6, 4, C.w3); P.rect(ctx, lx + 3, deckY, lw - 6, 1, C.w5); for (let i = lx + 10; i < lx + lw - 4; i += 14) P.rect(ctx, i, deckY + 1, 1, 3, C.w2);
     const hv = { up_helm: 'helm', up_fur: 'fur', up_rope: 'boots' }[this.hover], hk = { helm: 'helm', fur: 'fur', boots: 'rope' }[hv];
     const preview = hv && (G.ups[hk] || 0) < G.upMax(hk) ? { [hv]: (G.ups[hk] || 0) + 1 } : null;
-    const pose = { gear: captainGear(preview), wSpr: { cutlass: 'cutlass', scatter: 'scatterbow' }[cap.weapon] || null, run: 0, moving: false, air: false, vy: 0, crouch: 0, weaponA: REST_A - HALF_PI + Math.sin(t * 1.5) * 0.05, hurt: false, swim: false, down: false, rope: false, charge: 0, tell: 0, blocking: false, nock: 0, spin: 0, leanPx: 0, step: 0, breath: Math.floor(t * 1.2) % 2 };
+    const pose = { gear: captainGear(preview), wSpr: wSprite(cap.weapon, null), run: 0, moving: false, air: false, vy: 0, crouch: 0, weaponA: REST_A - HALF_PI + Math.sin(t * 1.5) * 0.05, hurt: false, swim: false, down: false, rope: false, charge: 0, tell: 0, blocking: false, nock: 0, spin: 0, leanPx: 0, step: 0, breath: Math.floor(t * 1.2) % 2 };
     const img = inkOutline(composePuppet('captain', pose), 72, 72);
     ctx.save(); ctx.beginPath(); ctx.rect(lx + 2, y + 10, lw - 4, bh - 4); ctx.clip();
     ctx.drawImage(img, 14, 20, 48, 42, lx + lw / 2 - 48, deckY - 82, 96, 84); ctx.restore();
@@ -712,14 +738,15 @@ const UI = {
     if (G.silver < cost || n >= G.upMax(k) || (u.weapon && !G.wpn.own[k])) return;
     G.silver -= cost; G.ups[k] = n + 1; Sfx.play('coin', 0, 1); Sfx.play('build', 0, 0.6);
     if (k === 'whet') cap.critBonus = (cap.critBonus || 0) + 0.06;
-    if (k === 'rune') cap.chargeRate = 1.3;
-    if (k === 'helm') cap.armor = (cap.armor || 1) * 0.85;
+    if (k === 'rune') cap.chargeRate = 1 + 0.3 * G.ups.rune;
+    if (k === 'helm') cap.armor = Math.max(0.4, Math.pow(0.85, G.ups.helm));
     if (k === 'fish') cap.hp = Math.min(cap.max, cap.hp + 35);
-    if (k === 'rope') cap.jumpMul = (cap.jumpMul || 1) + 0.12;
+    if (k === 'rope') cap.jumpMul = 1 + 0.1 * G.ups.rope;
     if (k === 'fur') { cap.max += 40; cap.hp += 40; }
     if (k === 'mead') cap.hp = cap.max;
     if (k === 'repair') { ps.hull = Math.min(ps.hullMax, ps.hull + 80); ps.breaches = []; }
     if (k === 'keel') { ps.hullMax += 80; ps.hull += 80; }
+    if (k === 'keel' || k === 'plate') ps.setLook({ keel: G.ups.keel || 0, plate: G.ups.plate || 0 });
     FX.text(cap.x, cap.y - 90, u.name, 'green', 20);
   },
   drawPause(ctx, W, H) {
@@ -734,14 +761,15 @@ const UI = {
     P.rect(ctx, 0, 0, W, H, 'rgba(4,6,12,0.5)'); TXT.dim(ctx, 0.5);
     const w = Math.min(340, W - 20), h = 150, x = Math.round(W / 2 - w / 2), y = Math.round(H / 2 - h / 2), s = G.stats;
     this.panel(ctx, x, y, w, h, this.won ? 'deep' : 'wood');
-    const ch1 = this.won && G.chapter === 1, ch2 = this.won && G.chapter === 2;
-    text(ctx, ch1 ? '第一章 完' : ch2 ? '冰海平静了' : '龙骨断了', W / 2, y + 12, { size: 22, align: 'center', color: this.won ? (ch2 ? C.n8 : C.g2) : C.r4, bold: true, outline: true });
-    text(ctx, ch1 ? '海妖沉回了海底。北方的冰海里，传来了龙吟……' : ch2 ? '霜龙沉入冰海。Bon 在桅杆上唱起了歌。' : `你撑到了第 ${G.chapter} 章第 ${G.step - (G.chapter - 1) * 6 + 1} 程。`, W / 2, y + 42, { size: 10, align: 'center', color: C.b2 });
+    const CH = CHAPTERS[G.chapter];
+    text(ctx, this.won ? CH.endTitle : '龙骨断了', W / 2, y + 12, { size: 22, align: 'center', color: this.won ? CH.col : C.r4, bold: true, outline: true });
+    text(ctx, this.won ? CH.endText : `你撑到了第 ${G.chapter} 章第 ${G.step - (G.chapter - 1) * 6 + 1} 程。`, W / 2, y + 42, { size: 10, align: 'center', color: C.b2, fit: w - 16 });
     const items = [['击倒', s.kills], ['打下海', s.overboard], ['击沉敌船', s.ships], ['砍断触手', s.tentacles], ['用时', `${Math.floor(s.time / 60)}:${String(Math.floor(s.time % 60)).padStart(2, '0')}`]];
     if (this.record) text(ctx, '新纪录！', x + 8, y + h - 22, { size: 10, color: C.f5, bold: true, outline: true, fit: 56 });
     items.forEach(([k, v], i) => { const cx = x + (w / items.length) * (i + 0.5); text(ctx, k, cx, y + 64, { size: 9, align: 'center', color: C.b1 }); const str = String(v); digits(ctx, str, cx - (str.length * 8 - 2) / 2, y + 80, C.b4, 2); });
-    if (this.won && G.chapter === 1) {
-      this.button(ctx, 'chapter2', W / 2 + 4, y + h - 28, 110, 18, '进入第二章 ›', { primary: true, fn: () => { this.screen = null; G.startChapter(2); } });
+    if (this.won && G.chapter < 5) {
+      const nx = G.chapter + 1;
+      this.button(ctx, 'chapter2', W / 2 + 4, y + h - 28, 110, 18, `进入第 ${nx} 章 ›`, { primary: true, fn: () => { this.screen = null; G.startChapter(nx); } });
       this.button(ctx, 'again', W / 2 - 104, y + h - 28, 96, 18, '重新开始', { fn: () => { this.screen = null; G.newRun(false); } });
     } else this.button(ctx, 'again', W / 2 - 45, y + h - 28, 90, 18, '再来一次', { primary: true, fn: () => { this.screen = null; G.newRun(false); } });
   },
